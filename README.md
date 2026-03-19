@@ -31,15 +31,12 @@ stateDiagram-v2
 
     Open --> Open: top_up
     Open --> Aborting: abort_start
-    Open --> Closed: close(commitment)
+    Open --> Closed: close
 
-    Aborting --> Closed: abort_finish [after abort_at_ledger]
-    Aborting --> Closed: close(commitment) [dispute]
+    Aborting --> Closed: abort_finish
+    Aborting --> Closed: close [dispute]
 
-    Closed --> Withdrawn: withdraw
-    Closed --> Closed: refund [remainder only]
-
-    Withdrawn --> [*]: refund [remainder]
+    Closed --> [*]: withdraw & refund
 ```
 
 ## Functions
