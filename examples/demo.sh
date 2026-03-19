@@ -78,6 +78,11 @@ COMMITMENT_3=$(stellar contract invoke --id channel --send=no -- prepare_commitm
 SIG_3=$(ed25519 sign $COMMITMENT_SKEY $COMMITMENT_3)
 echo "  Payment 3: cumulative 6,000,000 stroops, sig=$SIG_3"
 
+echo ""
+echo "=== Funder tops up channel with 5,000,000 more stroops ==="
+stellar keys use funder
+stellar contract invoke --id channel -- top_up --amount 5000000
+
 COMMITMENT_4=$(stellar contract invoke --id channel --send=no -- prepare_commitment --amount 8000000)
 SIG_4=$(ed25519 sign $COMMITMENT_SKEY $COMMITMENT_4)
 echo "  Payment 4: cumulative 8,000,000 stroops, sig=$SIG_4"
