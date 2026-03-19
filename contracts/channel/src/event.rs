@@ -3,7 +3,7 @@ use soroban_sdk::{contractevent, Address, BytesN};
 /// Emitted when the channel is opened via the constructor.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct OpenEvent {
+pub struct Open {
     pub from: Address,
     pub commitment_key: BytesN<32>,
     pub to: Address,
@@ -15,14 +15,14 @@ pub struct OpenEvent {
 /// Emitted when the channel is closed via close.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CloseEvent {
+pub struct Close {
     pub effective_at_ledger: u32,
 }
 
 /// Emitted when the recipient withdraws via withdraw.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WithdrawEvent {
+pub struct Withdraw {
     pub to: Address,
     pub amount: i128,
 }
@@ -30,7 +30,7 @@ pub struct WithdrawEvent {
 /// Emitted when the funder reclaims remaining funds via refund.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RefundEvent {
+pub struct Refund {
     pub from: Address,
     pub amount: i128,
 }

@@ -254,6 +254,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "channel-factory"
+version = "0.0.0"
+dependencies = [
+ "ed25519-dalek",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"

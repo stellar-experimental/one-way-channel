@@ -2,8 +2,7 @@
 #[allow(unused_imports)]
 use soroban_sdk::{assert_with_error, contract, contracterror, contractimpl, contracttype, symbol_short, token, xdr::ToXdr, Address, Bytes, BytesN, Env, Symbol};
 
-mod events;
-use events::*;
+mod event;
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -78,7 +77,7 @@ impl Contract {
         // Deposit initial funds.
         Self::top_up(env, amount);
 
-        env.events().publish_event(&OpenEvent {
+        env.events().publish_event(&event::Open {
             from,
             commitment_key,
             to,
@@ -88,7 +87,8 @@ impl Contract {
         });
     }
 
-    /// Top up the channel with the stored token from the stored from address.
+    /// Top up the channel by transferring the amount of the channels token from the funder (from
+    /// address).
     ///
     /// Callable by anyone, but only the from address is debited.
     ///
@@ -102,6 +102,16 @@ impl Contract {
             from.require_auth();
             Self::token_client(env).transfer(&from, &env.current_contract_address(), &amount);
         }
+    }
+
+    /// Returns the token address.
+    ///
+    /// Callable by anyone.
+    ///
+    /// # Auth
+    /// None.
+    pub fn token(env: &Env) -> Address {
+        env.storage().instance().get(&DataKey::Token).unwrap()
     }
 
     /// Returns the funder address.
@@ -132,6 +142,16 @@ impl Contract {
     /// None.
     pub fn deposited(env: &Env) -> i128 {
         Self::balance(env) + Self::withdrawn(env)
+    }
+
+    /// Returns the close waiting period in ledgers.
+    ///
+    /// Callable by anyone.
+    ///
+    /// # Auth
+    /// None.
+    pub fn close_waiting_period(env: &Env) -> u32 {
+        env.storage().instance().get(&DataKey::CloseWaitingPeriod).unwrap()
     }
 
     /// Returns the total amount already withdrawn by the recipient.
@@ -178,6 +198,10 @@ impl Contract {
     /// lower amount is used after a higher amount has already been withdrawn,
     /// no funds are transferred.
     ///
+    /// **Important:** The recipient should call this whenever they see a
+    /// [`event::Close`], before the close becomes effective. After the close is
+    /// effective the funder can refund the remaining balance.
+    ///
     /// Callable by the recipient (to).
     ///
     /// # Auth
@@ -196,13 +220,17 @@ impl Contract {
         if payout > 0 {
             env.storage().instance().set(&DataKey::Withdrawn, &amount);
             Self::token_client(env).transfer(&env.current_contract_address(), &to, &payout);
-            env.events().publish_event(&WithdrawEvent { to, amount: payout });
+            env.events().publish_event(&event::Withdraw { to, amount: payout });
         }
     }
 
     /// Close the channel, effective after a waiting period. The recipient can
     /// still withdraw during the waiting period. After the close is effective,
     /// the funder can call refund to reclaim the remaining balance.
+    ///
+    /// **Important:** The recipient should withdraw funds using [`Self::withdraw`]
+    /// whenever they see a [`event::Close`], before the close becomes effective.
+    /// After the close is effective the funder can refund the remaining balance.
     ///
     /// Callable by the funder (from).
     ///
@@ -214,16 +242,17 @@ impl Contract {
         from.require_auth();
 
         // Set the close effective ledger.
-        let close_waiting_period: u32 = env.storage().instance().get(&DataKey::CloseWaitingPeriod).unwrap();
+        let close_waiting_period = Self::close_waiting_period(env);
         let effective_at_ledger = env.ledger().sequence() + close_waiting_period;
         env.storage().instance().set(&DataKey::Closed, &effective_at_ledger);
 
-        env.events().publish_event(&CloseEvent { effective_at_ledger });
+        env.events().publish_event(&event::Close { effective_at_ledger });
     }
 
     /// Refund the remaining balance to the funder after the close is effective.
     ///
-    /// Callable by the funder (from).
+    /// Callable by the funder (from), after the close is effective_at_ledger
+    /// has been reached.
     ///
     /// # Auth
     /// - `from`: required.
@@ -243,7 +272,7 @@ impl Contract {
         let balance = tc.balance(&env.current_contract_address());
         if balance > 0 {
             tc.transfer(&env.current_contract_address(), &from, &balance);
-            env.events().publish_event(&RefundEvent { from, amount: balance });
+            env.events().publish_event(&event::Refund { from, amount: balance });
         }
         Ok(())
     }
@@ -251,8 +280,7 @@ impl Contract {
 
 impl Contract {
     fn token_client(env: &Env) -> token::Client<'_> {
-        let token: Address = env.storage().instance().get(&DataKey::Token).unwrap();
-        token::Client::new(env, &token)
+        token::Client::new(env, &Self::token(env))
     }
 }
 
