@@ -18,8 +18,11 @@ pub struct Open {
     pub refund_waiting_period: u32,
 }
 
-/// Emitted when the channel close becomes effective, either immediately via
-/// close or after a waiting period via close_start.
+/// Emitted when channel close starts, either immediately via close or with
+/// a waiting period via close_start.
+///
+/// The effective_at_ledger field indicates when the close is effective. If the
+/// field indicates the current ledger then the close is immediate.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Close {
