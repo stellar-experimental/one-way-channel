@@ -30,16 +30,15 @@ stateDiagram-v2
     Open --> Open: top_up / withdraw
     Open --> Closing: close
 
-    Closing --> Closing: withdraw
     Closing --> Closed: [after wait]
 
     Closed --> [*]: refund
 
     note right of Closing
-        withdraw available
+        withdraw
     end note
     note right of Closed
-        withdraw available until refund
+        withdraw
     end note
 ```
 
