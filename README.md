@@ -33,6 +33,7 @@ stateDiagram-v2
     Closing --> Closing: top_up / withdraw
     Closing --> Closed: [after wait]
 
+    Closed --> Closed: top_up / withdraw
     Closed --> [*]: refund
 ```
 
