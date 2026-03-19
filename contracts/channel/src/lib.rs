@@ -112,21 +112,16 @@
 //! | Function | Description |
 //! |---|---|
 //! | `__constructor` | Open a channel with an initial deposit. Callable by the funder, or anyone if amount is zero. |
+//! | `top_up` | Deposit additional tokens into the channel. |
+//! | `withdraw` | Withdraw funds using a signed commitment. |
 //! | `close` | Begin closing the channel, effective after a waiting period. |
 //! | `refund` | Refund the remaining balance to the funder after the close is effective. |
 //!
-//! ### Funding
-//!
-//! | Function | Description |
-//! |---|---|
-//! | `top_up` | Deposit additional tokens into the channel. |
-//!
-//! ### Commitments & Withdrawals
+//! ### Helpers
 //!
 //! | Function | Description |
 //! |---|---|
 //! | `prepare_commitment` | Generate the commitment bytes to sign. |
-//! | `withdraw` | Withdraw funds using a signed commitment. |
 //!
 //! ### Getters
 //!
