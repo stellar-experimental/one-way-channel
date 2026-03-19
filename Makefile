@@ -27,5 +27,8 @@ readme:
 readme-check: readme
 	git add -N . && git diff HEAD --exit-code
 
+install-tool-ed25519:
+	cargo install --locked --path tools/ed25519
+
 clean:
 	cargo clean
