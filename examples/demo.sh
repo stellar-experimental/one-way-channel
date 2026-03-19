@@ -34,7 +34,7 @@ echo "Token: $(stellar contract id asset --asset native)"
 
 echo ""
 echo "=== Installing channel wasm ==="
-WASM_HASH=$(stellar contract install \
+WASM_HASH=$(stellar contract upload \
     --wasm $WASM \
     --source funder)
 echo "Wasm hash: $WASM_HASH"
