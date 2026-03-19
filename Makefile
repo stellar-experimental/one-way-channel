@@ -16,10 +16,10 @@ fmt-check:
 	cargo fmt --all --check
 
 doc:
-	cargo doc --open
+	cargo doc --no-deps --open
 
 doc-check:
-	cargo doc
+	cargo doc --no-deps
 
 readme:
 	cd contracts/channel \
