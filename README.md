@@ -23,7 +23,7 @@ stateDiagram-v2
     Closing --> Closed: [after wait]
     Closed --> [*]: refund
 ```
- 
+
 `top_up` and `withdraw` can be called in any state. After `refund` the
 channel balance is zero so there is nothing left to withdraw.
 
@@ -151,10 +151,10 @@ the recipient and assumed to be of no interest to the recipient.
 
 # Channel Factory
 
-A factory contract for deploying channel contracts on Soroban (Stellar).
+A factory contract for opening channel contracts on Soroban (Stellar).
 
-The factory stores a channel contract wasm hash and deploys new channel
-instances using it. An admin can update the wasm hash to deploy newer
+The factory stores a channel contract wasm hash and opens new channel
+instances using it. An admin can update the wasm hash to open newer
 versions of the channel contract.
 
 ## Functions
@@ -162,5 +162,7 @@ versions of the channel contract.
 | Function | Description |
 |---|---|
 | `__constructor` | Initialize the factory with an admin and channel wasm hash. |
-| `set_wasm_hash` | Update the stored channel wasm hash. Admin only. |
-| `deploy` | Deploy a new channel contract with the given parameters. |
+| `set_wasm` | Update the stored channel wasm hash. Admin only. |
+| `open` | Deploy a new channel contract with the given parameters. |
+| `admin` | Returns the admin address. |
+| `wasm_hash` | Returns the stored channel wasm hash. |

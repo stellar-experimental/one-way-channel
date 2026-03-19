@@ -1,13 +1,19 @@
 default: build
 
-all: test
-
-test: build
-	cargo test
+all: build test fmt readme
 
 build:
 	stellar contract build
 	@ls -l target/wasm32v1-none/release/*.wasm
+
+test: build
+	cargo test
+
+fmt:
+	cargo fmt --all
+
+fmt-check:
+	cargo fmt --all --check
 
 readme:
 	cd contracts/channel \
@@ -18,8 +24,8 @@ readme:
 	echo "" >> README.md
 	jq -r '.index[.root|tostring].docs' target/doc/channel_factory.json >> README.md
 
-fmt:
-	cargo fmt --all
+readme-check: readme
+	git add -N . && git diff HEAD --exit-code
 
 clean:
 	cargo clean
