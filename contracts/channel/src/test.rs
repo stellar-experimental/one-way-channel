@@ -96,18 +96,18 @@ fn test_close_and_refund() {
 
     let to = Address::generate(&env);
     let funder = Address::generate(&env);
-    let close_waiting_period: u32 = 100;
+    let refund_waiting_period: u32 = 100;
 
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, close_waiting_period));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
     let client = ContractClient::new(&env, &channel_id);
 
     client.close();
 
     env.ledger().with_mut(|li| {
-        li.sequence_number += close_waiting_period + 1;
+        li.sequence_number += refund_waiting_period + 1;
     });
 
     client.refund();
@@ -115,7 +115,7 @@ fn test_close_and_refund() {
     assert_eq!(token.balance(&channel_id), 0);
 }
 
-/// Refund fails if called before the close waiting period has elapsed.
+/// Refund fails if called before the refund waiting period has elapsed.
 #[test]
 fn test_refund_too_early() {
     let env = Env::default();
@@ -161,7 +161,7 @@ fn test_refund_before_close_fails() {
     assert!(result.is_err());
 }
 
-/// The recipient can withdraw during the close waiting period, and the funder
+/// The recipient can withdraw during the refund waiting period, and the funder
 /// only refunds the remainder after the period elapses.
 #[test]
 fn test_withdraw_during_close() {
@@ -173,12 +173,12 @@ fn test_withdraw_during_close() {
 
     let to = Address::generate(&env);
     let funder = Address::generate(&env);
-    let close_waiting_period: u32 = 100;
+    let refund_waiting_period: u32 = 100;
 
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, close_waiting_period));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
     let client = ContractClient::new(&env, &channel_id);
 
     // Funder starts close.
@@ -191,7 +191,7 @@ fn test_withdraw_during_close() {
 
     // After wait, funder refunds the remainder.
     env.ledger().with_mut(|li| {
-        li.sequence_number += close_waiting_period + 1;
+        li.sequence_number += refund_waiting_period + 1;
     });
 
     client.refund();
@@ -225,7 +225,7 @@ fn test_invalid_signature() {
     assert!(result.is_err());
 }
 
-/// The recipient can withdraw after the close waiting period has elapsed, as
+/// The recipient can withdraw after the refund waiting period has elapsed, as
 /// long as refund has not been called yet.
 #[test]
 fn test_withdraw_after_close_effective_before_refund() {
@@ -237,12 +237,12 @@ fn test_withdraw_after_close_effective_before_refund() {
 
     let to = Address::generate(&env);
     let funder = Address::generate(&env);
-    let close_waiting_period: u32 = 100;
+    let refund_waiting_period: u32 = 100;
 
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, close_waiting_period));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
     let client = ContractClient::new(&env, &channel_id);
 
     // Funder closes.
@@ -250,7 +250,7 @@ fn test_withdraw_after_close_effective_before_refund() {
 
     // Wait for close to become effective.
     env.ledger().with_mut(|li| {
-        li.sequence_number += close_waiting_period + 1;
+        li.sequence_number += refund_waiting_period + 1;
     });
 
     // Recipient can still withdraw after close is effective, before refund.
@@ -328,12 +328,12 @@ fn test_close_resets_waiting_period() {
 
     let to = Address::generate(&env);
     let funder = Address::generate(&env);
-    let close_waiting_period: u32 = 100;
+    let refund_waiting_period: u32 = 100;
 
     let (token_addr, _token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, close_waiting_period));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
     let client = ContractClient::new(&env, &channel_id);
 
     // First close.
@@ -377,18 +377,18 @@ fn test_refund_twice() {
 
     let to = Address::generate(&env);
     let funder = Address::generate(&env);
-    let close_waiting_period: u32 = 100;
+    let refund_waiting_period: u32 = 100;
 
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, close_waiting_period));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
     let client = ContractClient::new(&env, &channel_id);
 
     client.close();
 
     env.ledger().with_mut(|li| {
-        li.sequence_number += close_waiting_period + 1;
+        li.sequence_number += refund_waiting_period + 1;
     });
 
     // First refund drains the balance.
@@ -510,19 +510,19 @@ fn test_refund_at_exact_effective_ledger() {
 
     let to = Address::generate(&env);
     let funder = Address::generate(&env);
-    let close_waiting_period: u32 = 100;
+    let refund_waiting_period: u32 = 100;
 
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, close_waiting_period));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
     let client = ContractClient::new(&env, &channel_id);
 
     client.close();
 
     // Advance exactly to the effective_at_ledger (not past it).
     env.ledger().with_mut(|li| {
-        li.sequence_number += close_waiting_period;
+        li.sequence_number += refund_waiting_period;
     });
 
     // Refund should succeed at exactly the effective ledger.

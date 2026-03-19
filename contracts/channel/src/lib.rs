@@ -20,7 +20,7 @@
 //!
 //! The channel is deployed with a SEP-41 token, funder address, recipient
 //! address, an ed25519 `commitment_key` (public key), an initial deposit
-//! amount, and a `close_waiting_period` (in ledgers).
+//! amount, and a `refund_waiting_period` (in ledgers).
 //!
 //! The funder's tokens are transferred into the channel contract on deployment.
 //! The funder can also top up the channel later using [`Contract::top_up`], or
@@ -99,7 +99,7 @@
 //!
 //! The funder calls [`Contract::close`] to begin closing the channel. The close
 //! does not take effect immediately — there is a waiting period of
-//! `close_waiting_period` ledgers.
+//! `refund_waiting_period` ledgers.
 //!
 //! The recipient can still call [`Contract::withdraw`] at any time, including
 //! after the waiting period has elapsed, up until the funder calls
@@ -112,7 +112,7 @@
 //!
 //! ### 5. Refund
 //!
-//! After the close waiting period has elapsed, the funder calls
+//! After the refund waiting period has elapsed, the funder calls
 //! [`Contract::refund`] to reclaim whatever balance remains in the channel.
 //! This transfers the **entire** remaining token balance to the funder,
 //! including any amount the recipient was entitled to but did not withdraw.
@@ -127,7 +127,7 @@
 //! - The commitment includes a domain separator and the channel contract
 //!   address, preventing signatures from being reused across channels or
 //!   confused with other signed payloads.
-//! - The close waiting period protects the recipient: it gives them time to
+//! - The refund waiting period protects the recipient: it gives them time to
 //!   withdraw using their latest commitment before the funder can reclaim
 //!   funds.
 
@@ -143,7 +143,7 @@ mod event;
 pub enum Error {
     NegativeAmount = 1,
     NotClosed = 2,
-    CloseWaitingPeriodNotElapsed = 3,
+    RefundWaitingPeriodNotElapsed = 3,
 }
 
 #[contracttype]
@@ -152,9 +152,9 @@ pub enum DataKey {
     From,
     CommitmentKey,
     To,
-    CloseWaitingPeriod,
-    Withdrawn,
-    Closed,
+    RefundWaitingPeriod,
+    WithdrawnAmount,
+    CloseEffectiveAtLedger,
 }
 
 #[contracttype]
@@ -204,7 +204,7 @@ impl Contract {
     /// - `to`: The recipient who can [`Self::withdraw`] funds using signed
     ///   commitments.
     /// - `amount`: The initial deposit amount.
-    /// - `close_waiting_period`: The number of ledgers the recipient has to
+    /// - `refund_waiting_period`: The number of ledgers the recipient has to
     ///   withdraw after [`Self::close`] is called, before [`Self::refund`]
     ///   becomes available. This value should be large enough to give the
     ///   recipient time to observe a close event and submit a withdrawal,
@@ -218,7 +218,7 @@ impl Contract {
     ///
     /// # Auth
     /// - `from`: required if amount > 0.
-    pub fn __constructor(env: &Env, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, close_waiting_period: u32) {
+    pub fn __constructor(env: &Env, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, refund_waiting_period: u32) {
         assert_with_error!(env, amount >= 0, Error::NegativeAmount);
 
         // Store channel configuration.
@@ -226,7 +226,7 @@ impl Contract {
         env.storage().instance().set(&DataKey::From, &from);
         env.storage().instance().set(&DataKey::CommitmentKey, &commitment_key);
         env.storage().instance().set(&DataKey::To, &to);
-        env.storage().instance().set(&DataKey::CloseWaitingPeriod, &close_waiting_period);
+        env.storage().instance().set(&DataKey::RefundWaitingPeriod, &refund_waiting_period);
 
         // Deposit initial funds.
         Self::top_up(env, amount);
@@ -237,7 +237,7 @@ impl Contract {
             to,
             token,
             amount,
-            close_waiting_period,
+            refund_waiting_period,
         });
     }
 
@@ -291,14 +291,14 @@ impl Contract {
         env.storage().instance().get(&DataKey::To).unwrap()
     }
 
-    /// Returns the close waiting period in ledgers.
+    /// Returns the refund waiting period in ledgers.
     ///
     /// Callable by anyone.
     ///
     /// # Auth
     /// None.
-    pub fn close_waiting_period(env: &Env) -> u32 {
-        env.storage().instance().get(&DataKey::CloseWaitingPeriod).unwrap()
+    pub fn refund_waiting_period(env: &Env) -> u32 {
+        env.storage().instance().get(&DataKey::RefundWaitingPeriod).unwrap()
     }
 
     /// Returns the total amount deposited into the channel.
@@ -318,7 +318,7 @@ impl Contract {
     /// # Auth
     /// None.
     pub fn withdrawn(env: &Env) -> i128 {
-        env.storage().instance().get(&DataKey::Withdrawn).unwrap_or(0)
+        env.storage().instance().get(&DataKey::WithdrawnAmount).unwrap_or(0)
     }
 
     /// Returns the balance of the channel.
@@ -393,7 +393,7 @@ impl Contract {
         // Transfer only the difference from what has already been withdrawn.
         let payout = amount - Self::withdrawn(env);
         if payout > 0 {
-            env.storage().instance().set(&DataKey::Withdrawn, &amount);
+            env.storage().instance().set(&DataKey::WithdrawnAmount, &amount);
             Self::token_client(env).transfer(&env.current_contract_address(), &to, &payout);
             env.events().publish_event(&event::Withdraw { to, amount: payout });
         }
@@ -419,9 +419,9 @@ impl Contract {
         from.require_auth();
 
         // Set the close effective ledger.
-        let close_waiting_period = Self::close_waiting_period(env);
-        let effective_at_ledger = env.ledger().sequence().saturating_add(close_waiting_period);
-        env.storage().instance().set(&DataKey::Closed, &effective_at_ledger);
+        let refund_waiting_period = Self::refund_waiting_period(env);
+        let effective_at_ledger = env.ledger().sequence().saturating_add(refund_waiting_period);
+        env.storage().instance().set(&DataKey::CloseEffectiveAtLedger, &effective_at_ledger);
 
         env.events().publish_event(&event::Close { effective_at_ledger });
     }
@@ -439,9 +439,9 @@ impl Contract {
     /// - `from`: required.
     pub fn refund(env: &Env) -> Result<(), Error> {
         // Verify the close is effective.
-        let effective_at_ledger: u32 = env.storage().instance().get(&DataKey::Closed).ok_or(Error::NotClosed)?;
+        let effective_at_ledger: u32 = env.storage().instance().get(&DataKey::CloseEffectiveAtLedger).ok_or(Error::NotClosed)?;
         if env.ledger().sequence() < effective_at_ledger {
-            return Err(Error::CloseWaitingPeriodNotElapsed);
+            return Err(Error::RefundWaitingPeriodNotElapsed);
         }
 
         // Verify the funder.

@@ -50,7 +50,7 @@ impl FactoryContract {
     ///
     /// # Auth
     /// - `from`: required if amount > 0.
-    pub fn deploy(env: &Env, salt: BytesN<32>, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, close_waiting_period: u32) -> Address {
+    pub fn deploy(env: &Env, salt: BytesN<32>, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, refund_waiting_period: u32) -> Address {
         // Authorize the funder at the factory level so that the channel
         // constructor's top_up does not require non-root authorization.
         from.require_auth();
@@ -60,7 +60,7 @@ impl FactoryContract {
         let channel_address = env
             .deployer()
             .with_current_contract(salt)
-            .deploy_v2(wasm_hash, (token, from, commitment_key, to, amount, close_waiting_period));
+            .deploy_v2(wasm_hash, (token, from, commitment_key, to, amount, refund_waiting_period));
 
         channel_address
     }

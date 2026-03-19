@@ -327,19 +327,7 @@
                       "key": {
                         "vec": [
                           {
-                            "symbol": "CloseWaitingPeriod"
-                          }
-                        ]
-                      },
-                      "val": {
-                        "u32": 100
-                      }
-                    },
-                    {
-                      "key": {
-                        "vec": [
-                          {
-                            "symbol": "Closed"
+                            "symbol": "CloseEffectiveAtLedger"
                           }
                         ]
                       },
@@ -375,6 +363,18 @@
                       "key": {
                         "vec": [
                           {
+                            "symbol": "RefundWaitingPeriod"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u32": 100
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
                             "symbol": "To"
                           }
                         ]
@@ -399,7 +399,7 @@
                       "key": {
                         "vec": [
                           {
-                            "symbol": "Withdrawn"
+                            "symbol": "WithdrawnAmount"
                           }
                         ]
                       },
