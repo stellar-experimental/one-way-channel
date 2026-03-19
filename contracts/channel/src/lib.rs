@@ -106,7 +106,7 @@ impl Contract {
     }
 
     /// Withdraw the committed amount to the recipient. The commitment amount is
-    /// the total amount, so only the difference from what has already been withdrawn is
+    /// the total amount, but only the difference from what has already been withdrawn is
     /// transferred. Can be called at any time.
     /// Called by the recipient (to).
     ///
