@@ -14,6 +14,46 @@
 //! - **Recipient (`to`)**: Receives commitments off-chain and can withdraw
 //!   funds on-chain at any time using a signed commitment.
 //!
+//! ## State diagram
+//!
+//! ```text
+//! [*] --> Open --> Closing --> Closed --> [*]
+//!     __constructor   close   [after wait]  refund
+//! ```
+//!
+//! `top_up` and `withdraw` can be called in any state. After `refund` the
+//! channel balance is zero so there is nothing left to withdraw.
+//!
+//! ## Functions
+//!
+//! ### Lifecycle
+//!
+//! | Function | Description |
+//! |---|---|
+//! | `__constructor` | Open a channel with an initial deposit. Callable by the funder, or anyone if amount is zero. |
+//! | `top_up` | Deposit additional tokens into the channel. |
+//! | `withdraw` | Withdraw funds using a signed commitment. |
+//! | `close` | Begin closing the channel, effective after a waiting period. |
+//! | `refund` | Refund the remaining balance to the funder after the close is effective. |
+//!
+//! ### Helpers
+//!
+//! | Function | Description |
+//! |---|---|
+//! | `prepare_commitment` | Generate the commitment bytes to sign. |
+//!
+//! ### Getters
+//!
+//! | Function | Description |
+//! |---|---|
+//! | `token` | Returns the token address. |
+//! | `from` | Returns the funder address. |
+//! | `to` | Returns the recipient address. |
+//! | `refund_waiting_period` | Returns the refund waiting period in ledgers. |
+//! | `deposited` | Returns the total amount deposited. |
+//! | `withdrawn` | Returns the total amount already withdrawn. |
+//! | `balance` | Returns the current balance (deposited minus withdrawn). |
+//!
 //! ## Lifecycle
 //!
 //! ### 1. Open
@@ -94,46 +134,6 @@
 //! The contract does not reserve funds for the recipient. If the recipient
 //! has not withdrawn before the funder calls refund, those funds are lost to
 //! the recipient and assumed to be of no interest to the recipient.
-//!
-//! ## State diagram
-//!
-//! ```text
-//! [*] --> Open --> Closing --> Closed --> [*]
-//!     __constructor   close   [after wait]  refund
-//! ```
-//!
-//! `top_up` and `withdraw` can be called in any state. After `refund` the
-//! channel balance is zero so there is nothing left to withdraw.
-//!
-//! ## Functions
-//!
-//! ### Lifecycle
-//!
-//! | Function | Description |
-//! |---|---|
-//! | `__constructor` | Open a channel with an initial deposit. Callable by the funder, or anyone if amount is zero. |
-//! | `top_up` | Deposit additional tokens into the channel. |
-//! | `withdraw` | Withdraw funds using a signed commitment. |
-//! | `close` | Begin closing the channel, effective after a waiting period. |
-//! | `refund` | Refund the remaining balance to the funder after the close is effective. |
-//!
-//! ### Helpers
-//!
-//! | Function | Description |
-//! |---|---|
-//! | `prepare_commitment` | Generate the commitment bytes to sign. |
-//!
-//! ### Getters
-//!
-//! | Function | Description |
-//! |---|---|
-//! | `token` | Returns the token address. |
-//! | `from` | Returns the funder address. |
-//! | `to` | Returns the recipient address. |
-//! | `refund_waiting_period` | Returns the refund waiting period in ledgers. |
-//! | `deposited` | Returns the total amount deposited. |
-//! | `withdrawn` | Returns the total amount already withdrawn. |
-//! | `balance` | Returns the current balance (deposited minus withdrawn). |
 //!
 //! ## Security
 //!
