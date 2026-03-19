@@ -28,6 +28,7 @@ fn create_token<'a>(env: &Env) -> (Address, TokenClient<'a>, StellarAssetClient<
     (address.clone(), TokenClient::new(env, &address), StellarAssetClient::new(env, &address))
 }
 
+/// Withdraw transfers the committed amount from the channel to the recipient.
 #[test]
 fn test_withdraw() {
     let env = Env::default();
@@ -52,6 +53,8 @@ fn test_withdraw() {
     assert_eq!(token.balance(&channel_id), 200);
 }
 
+/// Withdrawing with increasing commitment amounts only transfers the
+/// incremental difference each time.
 #[test]
 fn test_withdraw_incremental() {
     let env = Env::default();
@@ -81,6 +84,8 @@ fn test_withdraw_incremental() {
     assert_eq!(token.balance(&channel_id), 200);
 }
 
+/// The funder can close the channel and refund the full balance after the
+/// waiting period elapses.
 #[test]
 fn test_close_and_refund() {
     let env = Env::default();
@@ -110,6 +115,7 @@ fn test_close_and_refund() {
     assert_eq!(token.balance(&channel_id), 0);
 }
 
+/// Refund fails if called before the close waiting period has elapsed.
 #[test]
 fn test_refund_too_early() {
     let env = Env::default();
@@ -133,6 +139,7 @@ fn test_refund_too_early() {
     assert!(result.is_err());
 }
 
+/// Refund fails if close has never been called.
 #[test]
 fn test_refund_before_close_fails() {
     let env = Env::default();
@@ -154,6 +161,8 @@ fn test_refund_before_close_fails() {
     assert!(result.is_err());
 }
 
+/// The recipient can withdraw during the close waiting period, and the funder
+/// only refunds the remainder after the period elapses.
 #[test]
 fn test_withdraw_during_close() {
     let env = Env::default();
@@ -190,6 +199,8 @@ fn test_withdraw_during_close() {
     assert_eq!(token.balance(&channel_id), 0);
 }
 
+/// Withdraw fails if the commitment signature does not match the commitment
+/// key stored in the channel.
 #[test]
 fn test_invalid_signature() {
     let env = Env::default();
@@ -214,6 +225,8 @@ fn test_invalid_signature() {
     assert!(result.is_err());
 }
 
+/// The recipient can withdraw after the close waiting period has elapsed, as
+/// long as refund has not been called yet.
 #[test]
 fn test_withdraw_after_close_effective_before_refund() {
     let env = Env::default();
@@ -251,6 +264,7 @@ fn test_withdraw_after_close_effective_before_refund() {
     assert_eq!(token.balance(&channel_id), 0);
 }
 
+/// The funder can top up the channel after creation.
 #[test]
 fn test_top_up_after_creation() {
     let env = Env::default();
@@ -277,6 +291,7 @@ fn test_top_up_after_creation() {
     assert_eq!(token.balance(&funder), 500);
 }
 
+/// Withdrawing with a commitment for amount 0 is a no-op.
 #[test]
 fn test_withdraw_zero_amount() {
     let env = Env::default();
@@ -301,6 +316,8 @@ fn test_withdraw_zero_amount() {
     assert_eq!(token.balance(&channel_id), 500);
 }
 
+/// Calling close again resets the waiting period, preventing refund until the
+/// new waiting period elapses.
 #[test]
 fn test_close_resets_waiting_period() {
     let env = Env::default();
@@ -348,6 +365,8 @@ fn test_close_resets_waiting_period() {
     client.refund();
 }
 
+/// Calling refund a second time succeeds but transfers nothing since the
+/// balance is already zero.
 #[test]
 fn test_refund_twice() {
     let env = Env::default();
@@ -378,6 +397,135 @@ fn test_refund_twice() {
     assert_eq!(token.balance(&channel_id), 0);
 
     // Second refund succeeds but transfers nothing.
+    client.refund();
+    assert_eq!(token.balance(&funder), 1000);
+    assert_eq!(token.balance(&channel_id), 0);
+}
+
+/// Top up with amount 0 is a no-op and does not require auth.
+#[test]
+fn test_top_up_zero() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[14u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, _token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    // Top up with 0 — no transfer should occur, no auth required.
+    client.top_up(&0);
+    assert_eq!(client.balance(), 500);
+    // Verify no auth was required by checking auths is empty for top_up(0).
+    let auths = env.auths();
+    assert!(auths.is_empty());
+}
+
+/// The deposited, balance, and withdrawn getters return correct values as the
+/// channel state changes through withdrawals and top ups.
+#[test]
+fn test_deposited_and_balance_and_withdrawn() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[15u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, _token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    // Initial state.
+    assert_eq!(client.deposited(), 500);
+    assert_eq!(client.balance(), 500);
+    assert_eq!(client.withdrawn(), 0);
+
+    // After withdraw.
+    let sig = Commitment::new(channel_id.clone(), 200).sign(&auth_key);
+    client.withdraw(&200, &sig);
+    assert_eq!(client.deposited(), 500);
+    assert_eq!(client.balance(), 300);
+    assert_eq!(client.withdrawn(), 200);
+
+    // After top up.
+    client.top_up(&100);
+    assert_eq!(client.deposited(), 600);
+    assert_eq!(client.balance(), 400);
+    assert_eq!(client.withdrawn(), 200);
+}
+
+/// Using an older commitment with a lower amount after a higher amount has
+/// been withdrawn is a no-op — no transfer and no state change.
+#[test]
+fn test_withdraw_older_commitment_no_op() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[16u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    // Withdraw 300.
+    let sig1 = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
+    client.withdraw(&300, &sig1);
+    assert_eq!(token.balance(&to), 300);
+
+    // Use an older commitment for 200 — no additional transfer, no state change.
+    let sig2 = Commitment::new(channel_id.clone(), 200).sign(&auth_key);
+    client.withdraw(&200, &sig2);
+    assert_eq!(token.balance(&to), 300);
+    assert_eq!(token.balance(&channel_id), 200);
+    assert_eq!(client.withdrawn(), 300);
+}
+
+/// Refund succeeds when called at exactly the effective_at_ledger (boundary
+/// condition for the waiting period check).
+#[test]
+fn test_refund_at_exact_effective_ledger() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[17u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+    let close_waiting_period: u32 = 100;
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, close_waiting_period));
+    let client = ContractClient::new(&env, &channel_id);
+
+    client.close();
+
+    // Advance exactly to the effective_at_ledger (not past it).
+    env.ledger().with_mut(|li| {
+        li.sequence_number += close_waiting_period;
+    });
+
+    // Refund should succeed at exactly the effective ledger.
     client.refund();
     assert_eq!(token.balance(&funder), 1000);
     assert_eq!(token.balance(&channel_id), 0);
