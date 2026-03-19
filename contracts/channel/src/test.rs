@@ -31,7 +31,7 @@ fn sign_commitment(env: &Env, signing_key: &SigningKey, channel: &Address, amoun
 }
 
 #[test]
-fn test_settle() {
+fn test_withdraw() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -48,14 +48,14 @@ fn test_settle() {
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = sign_commitment(&env, &auth_key, &channel_id, 300);
-    client.settle(&300, &sig);
+    client.withdraw(&300, &sig);
 
     assert_eq!(token.balance(&to), 300);
     assert_eq!(token.balance(&channel_id), 200);
 }
 
 #[test]
-fn test_settle_incremental() {
+fn test_withdraw_incremental() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -73,12 +73,12 @@ fn test_settle_incremental() {
 
     // Settle 200 first.
     let sig1 = sign_commitment(&env, &auth_key, &channel_id, 200);
-    client.settle(&200, &sig1);
+    client.withdraw(&200, &sig1);
     assert_eq!(token.balance(&to), 200);
 
     // Settle 300 total — only 100 more transferred.
     let sig2 = sign_commitment(&env, &auth_key, &channel_id, 300);
-    client.settle(&300, &sig2);
+    client.withdraw(&300, &sig2);
     assert_eq!(token.balance(&to), 300);
     assert_eq!(token.balance(&channel_id), 200);
 }
@@ -157,7 +157,7 @@ fn test_refund_before_close_fails() {
 }
 
 #[test]
-fn test_settle_during_close() {
+fn test_withdraw_during_close() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -177,9 +177,9 @@ fn test_settle_during_close() {
     // Funder starts close.
     client.close();
 
-    // Recipient settles during the waiting period.
+    // Recipient withdraws during the waiting period.
     let sig = sign_commitment(&env, &auth_key, &channel_id, 300);
-    client.settle(&300, &sig);
+    client.withdraw(&300, &sig);
     assert_eq!(token.balance(&to), 300);
 
     // After wait, funder refunds the remainder.
@@ -212,6 +212,6 @@ fn test_invalid_signature() {
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = sign_commitment(&env, &wrong_key, &channel_id, 200);
-    let result = client.try_settle(&200, &sig);
+    let result = client.try_withdraw(&200, &sig);
     assert!(result.is_err());
 }

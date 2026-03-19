@@ -19,10 +19,10 @@ pub struct CloseEvent {
     pub effective_at_ledger: u32,
 }
 
-/// Emitted when the recipient settles via settle.
+/// Emitted when the recipient withdraws via withdraw.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SettleEvent {
+pub struct WithdrawEvent {
     pub to: Address,
     pub amount: i128,
 }

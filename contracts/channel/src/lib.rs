@@ -19,7 +19,7 @@ pub enum DataKey {
     CommitmentKey,
     To,
     CloseLedgerCount,
-    Settled,
+    Withdrawn,
     Closed,
 }
 
@@ -86,7 +86,7 @@ impl Contract {
     }
 
     /// Returns the balance of the channel. This is the deposited amount minus
-    /// any amount already settled.
+    /// any amount already withdrawn.
     /// Called by anyone.
     ///
     /// # Auth
@@ -96,7 +96,7 @@ impl Contract {
     }
 
     /// Returns the commitment payload that needs to be signed by the
-    /// commitment_key. The signed commitment can be passed to settle.
+    /// commitment_key. The signed commitment can be passed to withdraw.
     /// Called by anyone.
     ///
     /// # Auth
@@ -105,29 +105,29 @@ impl Contract {
         Commitment::new(&env, amount).into_bytes(&env)
     }
 
-    /// Settle the committed amount to the recipient. The commitment amount is
-    /// the total amount, so only the difference from what has already been settled is
+    /// Withdraw the committed amount to the recipient. The commitment amount is
+    /// the total amount, so only the difference from what has already been withdrawn is
     /// transferred. Can be called at any time.
     /// Called by the recipient (to).
     ///
     /// # Auth
     /// - `to`: required.
     /// - Commitment signature serves as commitment_key authorization.
-    pub fn settle(env: Env, amount: i128, sig: BytesN<64>) {
+    pub fn withdraw(env: Env, amount: i128, sig: BytesN<64>) {
         let to: Address = env.storage().instance().get(&DataKey::To).unwrap();
         to.require_auth();
         Commitment::new(&env, amount).verify(&env, &sig);
-        let settled: i128 = env.storage().instance().get(&DataKey::Settled).unwrap_or(0);
-        let payout = amount - settled;
+        let withdrawn: i128 = env.storage().instance().get(&DataKey::Withdrawn).unwrap_or(0);
+        let payout = amount - withdrawn;
         if payout > 0 {
-            env.storage().instance().set(&DataKey::Settled, &amount);
+            env.storage().instance().set(&DataKey::Withdrawn, &amount);
             Self::token_client(&env).transfer(&env.current_contract_address(), &to, &payout);
-            env.events().publish_event(&SettleEvent { to, amount: payout });
+            env.events().publish_event(&WithdrawEvent { to, amount: payout });
         }
     }
 
     /// Close the channel, effective after a waiting period. The recipient can
-    /// still settle during the waiting period. After the close is effective,
+    /// still withdraw during the waiting period. After the close is effective,
     /// the funder can call refund to reclaim the remaining balance.
     /// Called by the funder (from).
     ///
