@@ -108,8 +108,12 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "abort_start",
-              "args": []
+              "function_name": "close",
+              "args": [
+                {
+                  "i128": "0"
+                }
+              ]
             }
           },
           "sub_invocations": []
@@ -123,7 +127,7 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "close",
+              "function_name": "close_with_commitment",
               "args": [
                 {
                   "i128": "300"
@@ -328,7 +332,7 @@
                       "key": {
                         "vec": [
                           {
-                            "symbol": "AbortLedgerCount"
+                            "symbol": "CloseLedgerCount"
                           }
                         ]
                       },
@@ -345,7 +349,24 @@
                         ]
                       },
                       "val": {
-                        "i128": "0"
+                        "map": [
+                          {
+                            "key": {
+                              "symbol": "amount"
+                            },
+                            "val": {
+                              "i128": "0"
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "effective_at_ledger"
+                            },
+                            "val": {
+                              "u32": 0
+                            }
+                          }
+                        ]
                       }
                     },
                     {

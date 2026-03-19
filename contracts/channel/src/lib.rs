@@ -8,10 +8,8 @@ use events::*;
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    NotAborting = 1,
-    AbortPeriodNotElapsed = 2,
-    NotClosed = 3,
-    NotRefundable = 4,
+    NotClosed = 1,
+    ClosePeriodNotElapsed = 2,
 }
 
 #[contracttype]
@@ -20,8 +18,7 @@ pub enum DataKey {
     From,
     CommitmentKey,
     To,
-    AbortLedgerCount,
-    Abort,
+    CloseLedgerCount,
     Closed,
 }
 
@@ -53,8 +50,9 @@ impl Commitment {
 }
 
 #[contracttype]
-pub struct Abort {
-    pub abort_at_ledger: u32,
+pub struct Closed {
+    pub amount: i128,
+    pub effective_at_ledger: u32,
 }
 
 #[contract]
@@ -62,12 +60,12 @@ pub struct Contract;
 
 #[contractimpl]
 impl Contract {
-    pub fn __constructor(env: Env, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, abort_ledger_count: u32) {
+    pub fn __constructor(env: Env, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, close_ledger_count: u32) {
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::From, &from);
         env.storage().instance().set(&DataKey::CommitmentKey, &commitment_key);
         env.storage().instance().set(&DataKey::To, &to);
-        env.storage().instance().set(&DataKey::AbortLedgerCount, &abort_ledger_count);
+        env.storage().instance().set(&DataKey::CloseLedgerCount, &close_ledger_count);
         Self::top_up(env.clone(), amount);
         env.events().publish_event(&OpenEvent {
             from,
@@ -75,7 +73,7 @@ impl Contract {
             to,
             token,
             amount,
-            abort_ledger_count,
+            close_ledger_count,
         });
     }
 
@@ -102,7 +100,8 @@ impl Contract {
     }
 
     /// Returns the commitment payload that needs to be signed by the
-    /// commitment_key. The signed commitment can be passed to close.
+    /// commitment_key. The signed commitment can be passed to
+    /// close_with_commitment.
     /// Called by anyone.
     ///
     /// # Auth
@@ -111,53 +110,34 @@ impl Contract {
         Commitment::new(&env, amount).into_bytes(&env)
     }
 
-    /// Start aborting the channel. If undisputed, abort_finish will result in a
-    /// full refund to the funder. The recipient can dispute by calling
-    /// close with a commitment during the waiting period.
+    /// Close the channel with the given amount, effective after a waiting
+    /// period. The recipient can update the amount by calling
+    /// close_with_commitment before the close becomes effective.
     /// Called by the funder (from).
     ///
     /// # Auth
     /// - `from`: required.
-    pub fn abort_start(env: Env) {
+    pub fn close(env: Env, amount: i128) {
         let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
         from.require_auth();
-        let abort_ledger_count: u32 = env.storage().instance().get(&DataKey::AbortLedgerCount).unwrap();
-        let abort_at_ledger = env.ledger().sequence() + abort_ledger_count;
-        env.storage().instance().set(&DataKey::Abort, &Abort { abort_at_ledger });
-        env.events().publish_event(&AbortStartEvent { abort_at_ledger });
+        let close_ledger_count: u32 = env.storage().instance().get(&DataKey::CloseLedgerCount).unwrap();
+        let effective_at_ledger = env.ledger().sequence() + close_ledger_count;
+        env.storage().instance().set(&DataKey::Closed, &Closed { amount, effective_at_ledger });
+        env.events().publish_event(&CloseEvent { effective_at_ledger });
     }
 
-    /// Finish the abort after the abort_at_ledger has been reached.
-    /// Closes the channel with amount 0, resulting in a full refund to the funder.
-    /// Called by anyone.
-    ///
-    /// # Auth
-    /// None.
-    pub fn abort_finish(env: Env) -> Result<(), Error> {
-        let abort: Abort = env.storage().instance().get(&DataKey::Abort).ok_or(Error::NotAborting)?;
-
-        if env.ledger().sequence() < abort.abort_at_ledger {
-            return Err(Error::AbortPeriodNotElapsed);
-        }
-
-        env.storage().instance().remove(&DataKey::Abort);
-        env.storage().instance().set(&DataKey::Closed, &0i128);
-        env.events().publish_event(&ClosedEvent { amount: 0 });
-        Ok(())
-    }
-
-    /// Close the channel by submitting a commitment. No waiting period.
+    /// Close the channel by submitting a commitment. Effective immediately.
     /// Called by the recipient (to).
     ///
     /// # Auth
     /// - `to`: required.
     /// - Commitment signature serves as commitment_key authorization.
-    pub fn close(env: Env, amount: i128, sig: BytesN<64>) {
+    pub fn close_with_commitment(env: Env, amount: i128, sig: BytesN<64>) {
         let to: Address = env.storage().instance().get(&DataKey::To).unwrap();
         to.require_auth();
         Commitment::new(&env, amount).verify(&env, &sig);
-        env.storage().instance().remove(&DataKey::Abort);
-        env.storage().instance().set(&DataKey::Closed, &amount);
+        let effective_at_ledger = env.ledger().sequence();
+        env.storage().instance().set(&DataKey::Closed, &Closed { amount, effective_at_ledger });
         env.events().publish_event(&ClosedEvent { amount });
     }
 
@@ -167,14 +147,23 @@ impl Contract {
     /// # Auth
     /// None.
     pub fn withdraw(env: Env) -> Result<(), Error> {
-        let amount: i128 = env.storage().instance().get(&DataKey::Closed).ok_or(Error::NotClosed)?;
-        if amount == 0 {
+        let closed: Closed = env.storage().instance().get(&DataKey::Closed).ok_or(Error::NotClosed)?;
+        if env.ledger().sequence() < closed.effective_at_ledger {
+            return Err(Error::ClosePeriodNotElapsed);
+        }
+        if closed.amount == 0 {
             return Err(Error::NotClosed);
         }
         let to: Address = env.storage().instance().get(&DataKey::To).unwrap();
-        env.storage().instance().set(&DataKey::Closed, &0i128);
-        Self::token_client(&env).transfer(&env.current_contract_address(), &to, &amount);
-        env.events().publish_event(&WithdrawEvent { to, amount });
+        env.storage().instance().set(
+            &DataKey::Closed,
+            &Closed {
+                amount: 0,
+                effective_at_ledger: closed.effective_at_ledger,
+            },
+        );
+        Self::token_client(&env).transfer(&env.current_contract_address(), &to, &closed.amount);
+        env.events().publish_event(&WithdrawEvent { to, amount: closed.amount });
         Ok(())
     }
 
@@ -186,12 +175,15 @@ impl Contract {
     /// # Auth
     /// - `from`: required.
     pub fn refund(env: Env) -> Result<(), Error> {
-        let closed_amount: i128 = env.storage().instance().get(&DataKey::Closed).ok_or(Error::NotClosed)?;
+        let closed: Closed = env.storage().instance().get(&DataKey::Closed).ok_or(Error::NotClosed)?;
+        if env.ledger().sequence() < closed.effective_at_ledger {
+            return Err(Error::ClosePeriodNotElapsed);
+        }
         let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
         from.require_auth();
         let tc = Self::token_client(&env);
         let balance = tc.balance(&env.current_contract_address());
-        let refundable = balance - closed_amount;
+        let refundable = balance - closed.amount;
         if refundable > 0 {
             tc.transfer(&env.current_contract_address(), &from, &refundable);
             env.events().publish_event(&RefundEvent { from, amount: refundable });
