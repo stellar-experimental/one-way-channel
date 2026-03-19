@@ -41,9 +41,9 @@ to them.
 ```mermaid
 stateDiagram-v2
     [*] --> Open: __constructor
-    Open --> [*]: close
+    Open --> Closed: close
     Open --> Closing: close_start
-    Closing --> [*]: close
+    Closing --> Closed: close
     Closing --> Closed: [after wait]
     Closed --> [*]: refund
 ```
