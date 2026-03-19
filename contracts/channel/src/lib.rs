@@ -141,7 +141,7 @@ impl Contract {
         env.events().publish_event(&ClosedEvent { amount });
     }
 
-    /// Withdraw the authorized amount to `to` after the channel is closed.
+    /// Withdraw the committed amount to `to` after the channel is closed.
     /// Called by anyone.
     ///
     /// # Auth

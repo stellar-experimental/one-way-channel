@@ -5,7 +5,7 @@ A unidirectional payment channel contract for Soroban (Stellar).
 A funder (`from`) deposits tokens into a channel contract destined for a
 recipient (`to`). The funder issues off-chain signed commitments for increasing
 amounts. The recipient can close the channel at any time to claim the
-authorized amount, and the funder can reclaim the remainder.
+committed amount, and the funder can reclaim the remainder.
 
 ## How it works
 
@@ -47,7 +47,7 @@ stateDiagram-v2
 | `balance_deposited` | Returns the total amount deposited in the channel. | Anyone | None |
 | `close` | Close the channel with amount 0, effective after a waiting period. The recipient can update the amount with `close_with_commitment`. | Funder | `from` |
 | `close_with_commitment` | Close the channel by submitting a commitment. Effective immediately. | Recipient | `to` + commitment sig |
-| `withdraw` | Withdraw the authorized amount to `to` after the close is effective. | Anyone | None |
+| `withdraw` | Withdraw the committed amount to `to` after the close is effective. | Anyone | None |
 | `refund` | Refund the funder's portion of the balance after the close is effective. | Funder | `from` |
 
 ## Commitment format
