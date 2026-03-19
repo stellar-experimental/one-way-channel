@@ -13,10 +13,15 @@ authorized amount, and the funder can reclaim the remainder.
    auth key, initial deposit, and close ledger count.
 2. **Off-chain** -- The funder signs vouchers (using `prepare_voucher` to get
    the payload) for increasing amounts and sends them to the recipient.
-3. **Close** -- The recipient (or anyone with a voucher) closes the channel.
-4. **Withdraw** -- After close, anyone calls `withdraw` to transfer the closed
+3. **Close immediately** -- The recipient closes the channel immediately with a
+   voucher. This is the typical way to close a channel.
+4. **Close start/finish** -- If the recipient doesn't close the channel, anyone
+   with a voucher (e.g. the funder) can start a close. After a waiting period
+   anyone can finish the close. During the waiting period the close can be
+   disputed with a newer voucher.
+5. **Withdraw** -- After close, anyone calls `withdraw` to transfer the closed
    amount to the recipient.
-5. **Refund** -- The funder calls `refund` to reclaim the remainder.
+6. **Refund** -- The funder calls `refund` to reclaim the remainder.
 
 ## State diagram
 
