@@ -51,8 +51,7 @@ fn test_full_flow() {
     assert_eq!(token.balance(&channel_id), 500);
     assert_eq!(token.balance(&funder), 500);
 
-    let sig = sign_voucher(&env, &auth_key, &channel_id, 400);
-    client.close_start(&400, &sig);
+    client.close_start(&400);
 
     env.ledger().with_mut(|li| {
         li.sequence_number += close_ledger_count + 1;
@@ -87,11 +86,9 @@ fn test_close_dispute_overwrites() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig1 = sign_voucher(&env, &auth_key, &channel_id, 100);
-    client.close_start(&100, &sig1);
+    client.close_start(&100);
 
-    let sig2 = sign_voucher(&env, &auth_key, &channel_id, 300);
-    client.close_start(&300, &sig2);
+    client.close_start(&300);
 
     env.ledger().with_mut(|li| {
         li.sequence_number += 101;
@@ -122,8 +119,7 @@ fn test_close_finish_too_early() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig = sign_voucher(&env, &auth_key, &channel_id, 200);
-    client.close_start(&200, &sig);
+    client.close_start(&200);
 
     let result = client.try_close_finish();
     assert!(result.is_err());
@@ -149,7 +145,7 @@ fn test_invalid_signature() {
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = sign_voucher(&env, &wrong_key, &channel_id, 200);
-    let result = client.try_close_start(&200, &sig);
+    let result = client.try_close_immediately(&200, &sig);
     assert!(result.is_err());
 }
 
@@ -242,8 +238,7 @@ fn test_refund_during_close_start_fails() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig = sign_voucher(&env, &auth_key, &channel_id, 300);
-    client.close_start(&300, &sig);
+    client.close_start(&300);
 
     // Refund while close is pending should fail.
     let result = client.try_refund();

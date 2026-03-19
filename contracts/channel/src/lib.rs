@@ -103,7 +103,7 @@ impl Contract {
     }
 
     /// Returns the voucher payload that needs to be signed by the from_voucher_auth_key.
-    /// The signed voucher can be passed to close_start or close_immediately.
+    /// The signed voucher can be passed to close_immediately.
     /// Called by anyone.
     ///
     /// # Auth
@@ -112,17 +112,15 @@ impl Contract {
         Voucher::new(&env, amount).into_bytes(&env)
     }
 
-    /// Start closing the channel by submitting a voucher.
+    /// Start closing the channel with a given amount.
     /// Can be called again to overwrite a pending close.
-    /// Called by anyone with a valid voucher.
-    ///
-    /// Note: The recipient should prefer close_immediately since holding a voucher
-    /// and being the recipient they can authorize an immediate exit without waiting.
+    /// Called by the funder (from).
     ///
     /// # Auth
-    /// None. The voucher signature serves as authorization.
-    pub fn close_start(env: Env, amount: i128, sig: BytesN<64>) {
-        Voucher::new(&env, amount).verify(&env, &sig);
+    /// - `from`: required.
+    pub fn close_start(env: Env, amount: i128) {
+        let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
+        from.require_auth();
         let close_ledger_count: u32 = env.storage().instance().get(&DataKey::CloseLedgerCount).unwrap();
         let close_at_ledger = env.ledger().sequence() + close_ledger_count;
         env.storage().instance().set(&DataKey::Close, &Close { amount, close_at_ledger });
@@ -132,9 +130,6 @@ impl Contract {
     /// Finish the close after the close_at_ledger has been reached.
     /// Marks the channel as closed with the authorized amount.
     /// Called by anyone.
-    ///
-    /// Note: The recipient should prefer close_immediately since holding a voucher
-    /// and being the recipient they can authorize an immediate exit without waiting.
     ///
     /// # Auth
     /// None.

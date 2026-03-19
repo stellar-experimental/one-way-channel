@@ -15,10 +15,10 @@ authorized amount, and the funder can reclaim the remainder.
    the payload) for increasing amounts and sends them to the recipient.
 3. **Close immediately** -- The recipient closes the channel immediately with a
    voucher. This is the typical way to close a channel.
-4. **Close start/finish** -- If the recipient doesn't close the channel, anyone
-   with a voucher (e.g. the funder) can start a close. After a waiting period
-   anyone can finish the close. During the waiting period the close can be
-   disputed with a newer voucher.
+4. **Close start/finish** -- If the recipient doesn't close the channel, the
+   funder can start a close with a declared amount. After a waiting period
+   anyone can finish the close. During the waiting period the recipient can
+   dispute by calling `close_immediately` with a voucher.
 5. **Withdraw** -- After close, anyone calls `withdraw` to transfer the closed
    amount to the recipient.
 6. **Refund** -- The funder calls `refund` to reclaim the remainder.
@@ -30,12 +30,11 @@ stateDiagram-v2
     [*] --> Open: __constructor
 
     Open --> Open: top_up
-    Open --> Closing: close_start(voucher)
+    Open --> Closing: close_start
     Open --> Closed: close_immediately(voucher)
 
-    Closing --> Closing: close_start(voucher) [dispute]
     Closing --> Closed: close_finish [after close_at_ledger]
-    Closing --> Closed: close_immediately(voucher)
+    Closing --> Closed: close_immediately(voucher) [dispute]
 
     Closed --> Withdrawn: withdraw
     Closed --> Closed: refund [remainder only]
@@ -51,7 +50,7 @@ stateDiagram-v2
 | `top_up` | Top up the channel with the stored token from the stored from address. | Anyone | `from` |
 | `prepare_voucher` | Returns the voucher payload that needs to be signed by the from_voucher_auth_key. | Anyone | None |
 | `balance_deposited` | Returns the total amount deposited in the channel. | Anyone | None |
-| `close_start` | Start closing the channel by submitting a voucher. Can be called again to overwrite a pending close. | Anyone with voucher | None (voucher sig) |
+| `close_start` | Start closing the channel with a declared amount. Can be called again to overwrite a pending close. | Funder | `from` |
 | `close_finish` | Finish the close after the close_at_ledger has been reached. Marks the channel as closed with the authorized amount. | Anyone | None |
 | `close_immediately` | Close the channel immediately by submitting a voucher. No waiting period. | Recipient | `to` + voucher sig |
 | `withdraw` | Withdraw the authorized amount to `to` after the channel is closed. | Anyone | None |
