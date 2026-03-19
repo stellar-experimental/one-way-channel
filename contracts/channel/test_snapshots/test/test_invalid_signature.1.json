@@ -225,24 +225,24 @@
                       "key": {
                         "vec": [
                           {
-                            "symbol": "From"
+                            "symbol": "CommitmentKey"
                           }
                         ]
                       },
                       "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                        "bytes": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c"
                       }
                     },
                     {
                       "key": {
                         "vec": [
                           {
-                            "symbol": "FromVoucherAuthKey"
+                            "symbol": "From"
                           }
                         ]
                       },
                       "val": {
-                        "bytes": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c"
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                       }
                     },
                     {

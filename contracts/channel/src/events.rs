@@ -5,7 +5,7 @@ use soroban_sdk::{contractevent, Address, BytesN};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OpenEvent {
     pub from: Address,
-    pub from_voucher_auth_key: BytesN<32>,
+    pub commitment_key: BytesN<32>,
     pub to: Address,
     pub token: Address,
     pub amount: i128,

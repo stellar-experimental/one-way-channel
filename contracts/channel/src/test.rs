@@ -9,7 +9,7 @@ use soroban_sdk::{
     Address, BytesN, Env,
 };
 
-use crate::{Contract, ContractClient, Voucher};
+use crate::{Commitment, Contract, ContractClient};
 
 fn create_token<'a>(env: &Env) -> (Address, TokenClient<'a>, StellarAssetClient<'a>) {
     let admin = Address::generate(env);
@@ -18,13 +18,13 @@ fn create_token<'a>(env: &Env) -> (Address, TokenClient<'a>, StellarAssetClient<
     (address.clone(), TokenClient::new(env, &address), StellarAssetClient::new(env, &address))
 }
 
-fn sign_voucher(env: &Env, signing_key: &SigningKey, channel: &Address, amount: i128) -> BytesN<64> {
-    let voucher = Voucher {
-        prefix: symbol_short!("chanvchr"),
+fn sign_commitment(env: &Env, signing_key: &SigningKey, channel: &Address, amount: i128) -> BytesN<64> {
+    let commitment = Commitment {
+        prefix: symbol_short!("chancmmt"),
         channel: channel.clone(),
         amount,
     };
-    let payload = voucher.to_xdr(env);
+    let payload = commitment.to_xdr(env);
     let buf = payload.to_buffer::<256>();
     let sig = signing_key.sign(buf.as_slice());
     BytesN::from_array(env, &sig.to_bytes())
@@ -86,8 +86,8 @@ fn test_close_dispute() {
     // Funder starts abort (would result in full refund).
     client.abort_start();
 
-    // Recipient disputes with close using a voucher for 300.
-    let sig = sign_voucher(&env, &auth_key, &channel_id, 300);
+    // Recipient disputes with close using a commitment for 300.
+    let sig = sign_commitment(&env, &auth_key, &channel_id, 300);
     client.close(&300, &sig);
 
     client.withdraw();
@@ -139,7 +139,7 @@ fn test_invalid_signature() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig = sign_voucher(&env, &wrong_key, &channel_id, 200);
+    let sig = sign_commitment(&env, &wrong_key, &channel_id, 200);
     let result = client.try_close(&200, &sig);
     assert!(result.is_err());
 }
@@ -161,7 +161,7 @@ fn test_close() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig = sign_voucher(&env, &auth_key, &channel_id, 300);
+    let sig = sign_commitment(&env, &auth_key, &channel_id, 300);
     client.close(&300, &sig);
 
     assert_eq!(token.balance(&channel_id), 500);
@@ -257,7 +257,7 @@ fn test_refund_before_withdraw() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig = sign_voucher(&env, &auth_key, &channel_id, 300);
+    let sig = sign_commitment(&env, &auth_key, &channel_id, 300);
     client.close(&300, &sig);
 
     // Refund after close but before withdraw returns only the non-closed portion.

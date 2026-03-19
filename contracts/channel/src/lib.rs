@@ -18,7 +18,7 @@ pub enum Error {
 pub enum DataKey {
     Token,
     From,
-    FromVoucherAuthKey,
+    CommitmentKey,
     To,
     AbortLedgerCount,
     Abort,
@@ -26,16 +26,16 @@ pub enum DataKey {
 }
 
 #[contracttype]
-pub struct Voucher {
+pub struct Commitment {
     pub prefix: Symbol,
     pub channel: Address,
     pub amount: i128,
 }
 
-impl Voucher {
+impl Commitment {
     fn new(env: &Env, amount: i128) -> Self {
-        Voucher {
-            prefix: symbol_short!("chanvchr"),
+        Commitment {
+            prefix: symbol_short!("chancmmt"),
             channel: env.current_contract_address(),
             amount,
         }
@@ -46,9 +46,9 @@ impl Voucher {
     }
 
     fn verify(self, env: &Env, sig: &BytesN<64>) {
-        let from_voucher_auth_key: BytesN<32> = env.storage().instance().get(&DataKey::FromVoucherAuthKey).unwrap();
+        let commitment_key: BytesN<32> = env.storage().instance().get(&DataKey::CommitmentKey).unwrap();
         let payload = self.into_bytes(env);
-        env.crypto().ed25519_verify(&from_voucher_auth_key, &payload, sig);
+        env.crypto().ed25519_verify(&commitment_key, &payload, sig);
     }
 }
 
@@ -62,16 +62,16 @@ pub struct Contract;
 
 #[contractimpl]
 impl Contract {
-    pub fn __constructor(env: Env, token: Address, from: Address, from_voucher_auth_key: BytesN<32>, to: Address, amount: i128, abort_ledger_count: u32) {
+    pub fn __constructor(env: Env, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, abort_ledger_count: u32) {
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::From, &from);
-        env.storage().instance().set(&DataKey::FromVoucherAuthKey, &from_voucher_auth_key);
+        env.storage().instance().set(&DataKey::CommitmentKey, &commitment_key);
         env.storage().instance().set(&DataKey::To, &to);
         env.storage().instance().set(&DataKey::AbortLedgerCount, &abort_ledger_count);
         Self::top_up(env.clone(), amount);
         env.events().publish_event(&OpenEvent {
             from,
-            from_voucher_auth_key,
+            commitment_key,
             to,
             token,
             amount,
@@ -101,19 +101,19 @@ impl Contract {
         Self::token_client(&env).balance(&env.current_contract_address())
     }
 
-    /// Returns the voucher payload that needs to be signed by the from_voucher_auth_key.
-    /// The signed voucher can be passed to close.
+    /// Returns the commitment payload that needs to be signed by the
+    /// commitment_key. The signed commitment can be passed to close.
     /// Called by anyone.
     ///
     /// # Auth
     /// None.
-    pub fn prepare_voucher(env: Env, amount: i128) -> Bytes {
-        Voucher::new(&env, amount).into_bytes(&env)
+    pub fn prepare_commitment(env: Env, amount: i128) -> Bytes {
+        Commitment::new(&env, amount).into_bytes(&env)
     }
 
     /// Start aborting the channel. If undisputed, abort_finish will result in a
     /// full refund to the funder. The recipient can dispute by calling
-    /// close with a voucher during the waiting period.
+    /// close with a commitment during the waiting period.
     /// Called by the funder (from).
     ///
     /// # Auth
@@ -146,16 +146,16 @@ impl Contract {
         Ok(())
     }
 
-    /// Close the channel by submitting a voucher. No waiting period.
+    /// Close the channel by submitting a commitment. No waiting period.
     /// Called by the recipient (to).
     ///
     /// # Auth
     /// - `to`: required.
-    /// - Voucher signature serves as from_voucher_auth_key authorization.
+    /// - Commitment signature serves as commitment_key authorization.
     pub fn close(env: Env, amount: i128, sig: BytesN<64>) {
         let to: Address = env.storage().instance().get(&DataKey::To).unwrap();
         to.require_auth();
-        Voucher::new(&env, amount).verify(&env, &sig);
+        Commitment::new(&env, amount).verify(&env, &sig);
         env.storage().instance().remove(&DataKey::Abort);
         env.storage().instance().set(&DataKey::Closed, &amount);
         env.events().publish_event(&ClosedEvent { amount });

@@ -114,7 +114,7 @@
                   "i128": "300"
                 },
                 {
-                  "bytes": "6327ba6722daa21b94a746f276e0bae1a522ef26f5e6f47c970525c9d2948545d75904a94c188220add7d78f82990880cb1f887612490c68910b7e9faa1b160e"
+                  "bytes": "90249c2614f539777f23715f6805fe4b36765bf58f3f7638af517ff3038d43788171d329347aa52eae6bf4de81d233169b3e305e14b1fa985999cdd7137a4d04"
                 }
               ]
             }
@@ -318,24 +318,24 @@
                       "key": {
                         "vec": [
                           {
-                            "symbol": "From"
+                            "symbol": "CommitmentKey"
                           }
                         ]
                       },
                       "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                        "bytes": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1"
                       }
                     },
                     {
                       "key": {
                         "vec": [
                           {
-                            "symbol": "FromVoucherAuthKey"
+                            "symbol": "From"
                           }
                         ]
                       },
                       "val": {
-                        "bytes": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1"
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                       }
                     },
                     {
