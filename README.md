@@ -6,6 +6,9 @@ A payment channel allows a funder to make many small payments to a recipient
 off-chain, with only two on-chain transactions: opening the channel and
 closing it. This avoids per-payment transaction fees and latency.
 
+> [!WARNING]
+> **The contracts in this repository have not been audited.**
+
 ## Participants
 
 - **Funder (`from`)**: Deposits tokens into the channel and signs
