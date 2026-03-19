@@ -40,12 +40,12 @@ impl Commitment {
     }
 
     fn into_bytes(self) -> Bytes {
-        let env = self.channel.env();
-        self.to_xdr(env)
+        let env = self.channel.env().clone();
+        self.to_xdr(&env)
     }
 
     fn verify(self, sig: &BytesN<64>) {
-        let env = self.channel.env();
+        let env = self.channel.env().clone();
         let commitment_key: BytesN<32> = env.storage().instance().get(&DataKey::CommitmentKey).unwrap();
         let payload = self.into_bytes();
         env.crypto().ed25519_verify(&commitment_key, &payload, sig);
