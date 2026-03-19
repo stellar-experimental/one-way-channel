@@ -203,3 +203,82 @@ fn test_withdraw_before_close_fails() {
     let result = client.try_withdraw();
     assert!(result.is_err());
 }
+
+#[test]
+fn test_refund_before_close() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[7u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    // Refund before close returns all funds (no closed amount reserved).
+    client.refund();
+    assert_eq!(token.balance(&funder), 1000);
+    assert_eq!(token.balance(&channel_id), 0);
+}
+
+#[test]
+fn test_refund_during_close_start_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[9u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, _token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    let sig = sign_voucher(&env, &auth_key, &channel_id, &token_addr, 300);
+    client.close_start(&300, &sig);
+
+    // Refund while close is pending should fail.
+    let result = client.try_refund();
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_refund_before_withdraw() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[8u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    let sig = sign_voucher(&env, &auth_key, &channel_id, &token_addr, 300);
+    client.close_immediately(&300, &sig);
+
+    // Refund after close but before withdraw returns only the non-closed portion.
+    client.refund();
+    assert_eq!(token.balance(&funder), 700); // 500 kept + 200 refunded
+    assert_eq!(token.balance(&channel_id), 300); // closed amount reserved
+
+    // Withdraw still works for the closed amount.
+    client.withdraw();
+    assert_eq!(token.balance(&to), 300);
+    assert_eq!(token.balance(&channel_id), 0);
+}

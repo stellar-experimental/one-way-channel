@@ -8,6 +8,7 @@ pub enum Error {
     NotClosing = 1,
     ClosePeriodNotElapsed = 2,
     NotClosed = 3,
+    NotRefundable = 4,
 }
 
 #[contracttype]
@@ -214,20 +215,28 @@ impl Contract {
         Ok(())
     }
 
-    /// Refund any remaining balance back to the funder.
+    /// Refund the funder's portion of the balance.
+    /// Can be called after the channel is closed. The refundable amount is
+    /// the balance minus the closed amount (if not yet withdrawn).
     /// Called by the funder (from).
     ///
     /// # Auth
     /// - `from`: required.
-    pub fn refund(env: Env) {
+    pub fn refund(env: Env) -> Result<(), Error> {
+        if env.storage().instance().has(&DataKey::Close) {
+            return Err(Error::NotRefundable);
+        }
+        let closed_amount: i128 = env.storage().instance().get(&DataKey::Closed).unwrap_or(0);
         let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
         from.require_auth();
         let tc = Self::token_client(&env);
-        let remaining = tc.balance(&env.current_contract_address());
-        if remaining > 0 {
-            tc.transfer(&env.current_contract_address(), &from, &remaining);
-            env.events().publish_event(&RefundEvent { from, amount: remaining });
+        let balance = tc.balance(&env.current_contract_address());
+        let refundable = balance - closed_amount;
+        if refundable > 0 {
+            tc.transfer(&env.current_contract_address(), &from, &refundable);
+            env.events().publish_event(&RefundEvent { from, amount: refundable });
         }
+        Ok(())
     }
 }
 
