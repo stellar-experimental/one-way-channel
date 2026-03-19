@@ -41,7 +41,10 @@
 //!     Open --> Closing: close
 //!     Closing --> Closed: [after wait]
 //!     Closed --> [*]: refund
-//!     state "top_up and withdraw can be called in any state" as note
+//!     note left of Closing
+//!         top_up and withdraw
+//!         can be called in any state
+//!     end note
 //! ```
 //!
 //! ## Functions
