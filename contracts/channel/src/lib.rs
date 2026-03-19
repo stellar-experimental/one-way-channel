@@ -137,6 +137,15 @@ impl Contract {
         }
     }
 
+    /// Returns the total amount deposited in the channel.
+    /// Called by anyone.
+    ///
+    /// # Auth
+    /// None.
+    pub fn balance_deposited(env: Env) -> i128 {
+        Self::token_client(&env).balance(&env.current_contract_address())
+    }
+
     /// Returns the voucher payload that needs to be signed by the from_voucher_auth_key.
     /// The signed voucher can be passed to close_start or close_immediately.
     /// Called by anyone.
@@ -145,15 +154,6 @@ impl Contract {
     /// None.
     pub fn prepare_voucher(env: Env, amount: i128) -> Bytes {
         Voucher::new(&env, amount).into_bytes(&env)
-    }
-
-    /// Returns the total amount deposited in the channel.
-    /// Called by anyone.
-    ///
-    /// # Auth
-    /// None.
-    pub fn balance_deposited(env: Env) -> i128 {
-        Self::token_client(&env).balance(&env.current_contract_address())
     }
 
     /// Start closing the channel by submitting a voucher.
