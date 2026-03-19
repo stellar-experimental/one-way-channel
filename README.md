@@ -24,7 +24,7 @@ to them.
 
 ### Funder
 
-- Keeping the commitment key secret.
+- Keeping the private key corresponding to `commitment_key` (the commitment signing key) secret.
 
 ### Recipient
 
