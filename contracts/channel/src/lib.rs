@@ -104,7 +104,7 @@ impl Contract {
     /// # Auth
     /// None.
     pub fn prepare_commitment(env: Env, amount: i128) -> Bytes {
-        Commitment::new(env.current_contract_address(), amount).into_bytes(&env)
+        Commitment::new(env.current_contract_address(), amount).into_bytes()
     }
 
     /// Withdraw the committed amount to the recipient. The commitment amount is
