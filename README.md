@@ -33,8 +33,14 @@ stateDiagram-v2
     Closing --> Closing: withdraw
     Closing --> Closed: [after wait]
 
-    Closed --> Closed: withdraw
     Closed --> [*]: refund
+
+    note right of Closing
+        withdraw available
+    end note
+    note right of Closed
+        withdraw available until refund
+    end note
 ```
 
 ## Functions
