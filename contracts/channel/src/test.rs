@@ -91,18 +91,18 @@ fn test_close_and_refund() {
 
     let to = Address::generate(&env);
     let funder = Address::generate(&env);
-    let close_ledger_count: u32 = 100;
+    let close_waiting_period: u32 = 100;
 
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, close_ledger_count));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, close_waiting_period));
     let client = ContractClient::new(&env, &channel_id);
 
     client.close();
 
     env.ledger().with_mut(|li| {
-        li.sequence_number += close_ledger_count + 1;
+        li.sequence_number += close_waiting_period + 1;
     });
 
     client.refund();
@@ -164,12 +164,12 @@ fn test_withdraw_during_close() {
 
     let to = Address::generate(&env);
     let funder = Address::generate(&env);
-    let close_ledger_count: u32 = 100;
+    let close_waiting_period: u32 = 100;
 
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, close_ledger_count));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, close_waiting_period));
     let client = ContractClient::new(&env, &channel_id);
 
     // Funder starts close.
@@ -182,7 +182,7 @@ fn test_withdraw_during_close() {
 
     // After wait, funder refunds the remainder.
     env.ledger().with_mut(|li| {
-        li.sequence_number += close_ledger_count + 1;
+        li.sequence_number += close_waiting_period + 1;
     });
 
     client.refund();

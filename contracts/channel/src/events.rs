@@ -9,7 +9,7 @@ pub struct OpenEvent {
     pub to: Address,
     pub token: Address,
     pub amount: i128,
-    pub close_ledger_count: u32,
+    pub close_waiting_period: u32,
 }
 
 /// Emitted when the channel is closed via close.

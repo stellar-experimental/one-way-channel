@@ -327,7 +327,7 @@
                       "key": {
                         "vec": [
                           {
-                            "symbol": "CloseLedgerCount"
+                            "symbol": "CloseWaitingPeriod"
                           }
                         ]
                       },

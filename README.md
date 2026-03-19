@@ -10,7 +10,7 @@ and the funder can close the channel to reclaim the remainder.
 ## How it works
 
 1. **Open** -- Deploy the contract with the token, funder, recipient, commitment
-   key, initial deposit, and close ledger count.
+   key, initial deposit, and close waiting period.
 2. **Off-chain** -- The funder signs commitments (using `prepare_commitment` to
    get the payload) for increasing amounts and sends them to the recipient.
 3. **Withdraw** -- The recipient withdraws at any time with a commitment, receiving
@@ -40,7 +40,7 @@ stateDiagram-v2
 
 | Function | Description | Who can call | Auth required |
 |---|---|---|---|
-| `__constructor` | Deploy the contract with the token, funder, recipient, commitment key, initial deposit, and close ledger count. | Deployer | `from` |
+| `__constructor` | Deploy the contract with the token, funder, recipient, commitment key, initial deposit, and close waiting period. | Deployer | `from` |
 | `top_up` | Top up the channel with the stored token from the stored from address. | Anyone | `from` |
 | `prepare_commitment` | Returns the commitment payload that needs to be signed by the commitment_key. | Anyone | None |
 | `deposited` | Returns the total amount deposited into the channel. | Anyone | None |

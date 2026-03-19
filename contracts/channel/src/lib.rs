@@ -11,7 +11,7 @@ use events::*;
 pub enum Error {
     NegativeAmount = 1,
     NotClosed = 2,
-    ClosePeriodNotElapsed = 3,
+    CloseWaitingPeriodNotElapsed = 3,
 }
 
 #[contracttype]
@@ -20,7 +20,7 @@ pub enum DataKey {
     From,
     CommitmentKey,
     To,
-    CloseLedgerCount,
+    CloseWaitingPeriod,
     Withdrawn,
     Closed,
 }
@@ -65,15 +65,15 @@ impl Contract {
     ///
     /// # Auth
     /// - `from`: required.
-    pub fn __constructor(env: &Env, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, close_ledger_count: u32) {
-        assert_with_error!(env, amount >= 0, Error::NegativeAmount);
+    pub fn __constructor(env: &Env, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, close_waiting_period: u32) {
+        assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
 
         // Store channel configuration.
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::From, &from);
         env.storage().instance().set(&DataKey::CommitmentKey, &commitment_key);
         env.storage().instance().set(&DataKey::To, &to);
-        env.storage().instance().set(&DataKey::CloseLedgerCount, &close_ledger_count);
+        env.storage().instance().set(&DataKey::CloseWaitingPeriod, &close_waiting_period);
 
         // Deposit initial funds.
         Self::top_up(env, amount);
@@ -84,7 +84,7 @@ impl Contract {
             to,
             token,
             amount,
-            close_ledger_count,
+            close_waiting_period,
         });
     }
 
@@ -95,13 +95,33 @@ impl Contract {
     /// # Auth
     /// - `from`: required.
     pub fn top_up(env: &Env, amount: i128) {
-        assert_with_error!(env, amount >= 0, Error::NegativeAmount);
+        assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
         if amount > 0 {
             // Transfer tokens from the funder to the channel.
-            let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
+            let from = Self::from(env);
             from.require_auth();
             Self::token_client(env).transfer(&from, &env.current_contract_address(), &amount);
         }
+    }
+
+    /// Returns the funder address.
+    ///
+    /// Callable by anyone.
+    ///
+    /// # Auth
+    /// None.
+    pub fn from(env: &Env) -> Address {
+        env.storage().instance().get(&DataKey::From).unwrap()
+    }
+
+    /// Returns the recipient address.
+    ///
+    /// Callable by anyone.
+    ///
+    /// # Auth
+    /// None.
+    pub fn to(env: &Env) -> Address {
+        env.storage().instance().get(&DataKey::To).unwrap()
     }
 
     /// Returns the total amount deposited into the channel.
@@ -143,7 +163,7 @@ impl Contract {
     /// # Auth
     /// None.
     pub fn prepare_commitment(env: &Env, amount: i128) -> Bytes {
-        assert_with_error!(env, amount >= 0, Error::NegativeAmount);
+        assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
         Commitment::new(env.current_contract_address(), amount).into_bytes()
     }
 
@@ -164,16 +184,15 @@ impl Contract {
     /// - `to`: required.
     /// - Commitment signature serves as commitment_key authorization.
     pub fn withdraw(env: &Env, amount: i128, sig: BytesN<64>) {
-        assert_with_error!(env, amount >= 0, Error::NegativeAmount);
+        assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
 
         // Verify the recipient and commitment signature.
-        let to: Address = env.storage().instance().get(&DataKey::To).unwrap();
+        let to = Self::to(env);
         to.require_auth();
         Commitment::new(env.current_contract_address(), amount).verify(&sig);
 
         // Transfer only the difference from what has already been withdrawn.
-        let withdrawn: i128 = env.storage().instance().get(&DataKey::Withdrawn).unwrap_or(0);
-        let payout = amount - withdrawn;
+        let payout = amount - Self::withdrawn(env);
         if payout > 0 {
             env.storage().instance().set(&DataKey::Withdrawn, &amount);
             Self::token_client(env).transfer(&env.current_contract_address(), &to, &payout);
@@ -191,12 +210,12 @@ impl Contract {
     /// - `from`: required.
     pub fn close(env: &Env) {
         // Verify the funder.
-        let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
+        let from = Self::from(env);
         from.require_auth();
 
         // Set the close effective ledger.
-        let close_ledger_count: u32 = env.storage().instance().get(&DataKey::CloseLedgerCount).unwrap();
-        let effective_at_ledger = env.ledger().sequence() + close_ledger_count;
+        let close_waiting_period: u32 = env.storage().instance().get(&DataKey::CloseWaitingPeriod).unwrap();
+        let effective_at_ledger = env.ledger().sequence() + close_waiting_period;
         env.storage().instance().set(&DataKey::Closed, &effective_at_ledger);
 
         env.events().publish_event(&CloseEvent { effective_at_ledger });
@@ -212,11 +231,11 @@ impl Contract {
         // Verify the close is effective.
         let effective_at_ledger: u32 = env.storage().instance().get(&DataKey::Closed).ok_or(Error::NotClosed)?;
         if env.ledger().sequence() < effective_at_ledger {
-            return Err(Error::ClosePeriodNotElapsed);
+            return Err(Error::CloseWaitingPeriodNotElapsed);
         }
 
         // Verify the funder.
-        let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
+        let from = Self::from(env);
         from.require_auth();
 
         // Transfer the remaining balance to the funder.
