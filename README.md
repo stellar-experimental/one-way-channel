@@ -48,8 +48,8 @@ stateDiagram-v2
     Closed --> [*]: refund
 ```
 
-`top_up` and `close` can be called in any state. After `refund` the
-channel balance is zero so there is nothing left to close.
+`top_up` can be called in any state. `close` can only be called before
+the channel is closed.
 
 ## Functions
 

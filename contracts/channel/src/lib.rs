@@ -41,15 +41,15 @@
 //! ```mermaid
 //! stateDiagram-v2
 //!     [*] --> Open: __constructor
-//!     Open --> [*]: close
+//!     Open --> Closed: close
 //!     Open --> Closing: close_start
-//!     Closing --> [*]: close
+//!     Closing --> Closed: close
 //!     Closing --> Closed: [after wait]
 //!     Closed --> [*]: refund
 //! ```
 //!
-//! `top_up` and `close` can be called in any state. After `refund` the
-//! channel balance is zero so there is nothing left to close.
+//! `top_up` can be called in any state. `close` can only be called before
+//! the channel is closed.
 //!
 //! ## Functions
 //!
