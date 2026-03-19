@@ -27,24 +27,13 @@ and the funder can close the channel to reclaim the remainder.
 stateDiagram-v2
     [*] --> Open: __constructor
 
+    Open --> Open: top_up / settle
     Open --> Closing: close
 
+    Closing --> Closing: top_up / settle
     Closing --> Closed: [after wait]
 
     Closed --> [*]: refund
-
-    note right of Open
-        top_up
-    end note
-    note left of Open
-        settle
-    end note
-    note right of Closing
-        top_up
-    end note
-    note left of Closing
-        settle
-    end note
 ```
 
 ## Functions
