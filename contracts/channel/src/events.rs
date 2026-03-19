@@ -17,7 +17,6 @@ pub struct OpenEvent {
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CloseStartEvent {
-    pub amount: i128,
     pub close_at_ledger: u32,
 }
 

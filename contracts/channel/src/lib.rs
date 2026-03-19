@@ -54,7 +54,6 @@ impl Voucher {
 
 #[contracttype]
 pub struct Close {
-    pub amount: i128,
     pub close_at_ledger: u32,
 }
 
@@ -112,23 +111,24 @@ impl Contract {
         Voucher::new(&env, amount).into_bytes(&env)
     }
 
-    /// Start closing the channel with a given amount.
-    /// Can be called again to overwrite a pending close.
+    /// Start closing the channel. If undisputed, close_finish will result in a
+    /// full refund to the funder. The recipient can dispute by calling
+    /// close_immediately with a voucher during the waiting period.
     /// Called by the funder (from).
     ///
     /// # Auth
     /// - `from`: required.
-    pub fn close_start(env: Env, amount: i128) {
+    pub fn close_start(env: Env) {
         let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
         from.require_auth();
         let close_ledger_count: u32 = env.storage().instance().get(&DataKey::CloseLedgerCount).unwrap();
         let close_at_ledger = env.ledger().sequence() + close_ledger_count;
-        env.storage().instance().set(&DataKey::Close, &Close { amount, close_at_ledger });
-        env.events().publish_event(&CloseStartEvent { amount, close_at_ledger });
+        env.storage().instance().set(&DataKey::Close, &Close { close_at_ledger });
+        env.events().publish_event(&CloseStartEvent { close_at_ledger });
     }
 
     /// Finish the close after the close_at_ledger has been reached.
-    /// Marks the channel as closed with the authorized amount.
+    /// Closes the channel with amount 0, resulting in a full refund to the funder.
     /// Called by anyone.
     ///
     /// # Auth
@@ -141,8 +141,8 @@ impl Contract {
         }
 
         env.storage().instance().remove(&DataKey::Close);
-        env.storage().instance().set(&DataKey::Closed, &close.amount);
-        env.events().publish_event(&ClosedEvent { amount: close.amount });
+        env.storage().instance().set(&DataKey::Closed, &0i128);
+        env.events().publish_event(&ClosedEvent { amount: 0 });
         Ok(())
     }
 

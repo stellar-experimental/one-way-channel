@@ -50,8 +50,8 @@ stateDiagram-v2
 | `top_up` | Top up the channel with the stored token from the stored from address. | Anyone | `from` |
 | `prepare_voucher` | Returns the voucher payload that needs to be signed by the from_voucher_auth_key. | Anyone | None |
 | `balance_deposited` | Returns the total amount deposited in the channel. | Anyone | None |
-| `close_start` | Start closing the channel with a declared amount. Can be called again to overwrite a pending close. | Funder | `from` |
-| `close_finish` | Finish the close after the close_at_ledger has been reached. Marks the channel as closed with the authorized amount. | Anyone | None |
+| `close_start` | Start closing the channel. If undisputed, results in a full refund to the funder. | Funder | `from` |
+| `close_finish` | Finish the close after the close_at_ledger has been reached. Closes with amount 0, resulting in a full refund. | Anyone | None |
 | `close_immediately` | Close the channel immediately by submitting a voucher. No waiting period. | Recipient | `to` + voucher sig |
 | `withdraw` | Withdraw the authorized amount to `to` after the channel is closed. | Anyone | None |
 | `refund` | Refund the funder's portion of the balance. Can be called after the channel is closed. | Funder | `from` |

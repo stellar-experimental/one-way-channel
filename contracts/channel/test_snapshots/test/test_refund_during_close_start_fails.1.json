@@ -109,11 +109,7 @@
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
               "function_name": "close_start",
-              "args": [
-                {
-                  "i128": "300"
-                }
-              ]
+              "args": []
             }
           },
           "sub_invocations": []
@@ -258,14 +254,6 @@
                       },
                       "val": {
                         "map": [
-                          {
-                            "key": {
-                              "symbol": "amount"
-                            },
-                            "val": {
-                              "i128": "300"
-                            }
-                          },
                           {
                             "key": {
                               "symbol": "close_at_ledger"
