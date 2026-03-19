@@ -40,12 +40,12 @@ impl Commitment {
     }
 
     fn into_bytes(self) -> Bytes {
-        let env = self.channel.env().clone();
-        self.to_xdr(&env)
+        let env = self.channel.env();
+        self.to_xdr(env)
     }
 
     fn verify(self, sig: &BytesN<64>) {
-        let env = self.channel.env().clone();
+        let env = self.channel.env();
         let commitment_key: BytesN<32> = env.storage().instance().get(&DataKey::CommitmentKey).unwrap();
         let payload = self.into_bytes();
         env.crypto().ed25519_verify(&commitment_key, &payload, sig);
@@ -104,7 +104,7 @@ impl Contract {
     /// # Auth
     /// None.
     pub fn prepare_commitment(env: Env, amount: i128) -> Bytes {
-        Commitment::new(env.current_contract_address(), amount).into_bytes()
+        Commitment::new(env.current_contract_address(), amount).into_bytes(&env)
     }
 
     /// Withdraw the committed amount to the recipient. The commitment amount is
@@ -118,7 +118,7 @@ impl Contract {
     pub fn withdraw(env: Env, amount: i128, sig: BytesN<64>) {
         let to: Address = env.storage().instance().get(&DataKey::To).unwrap();
         to.require_auth();
-        Commitment::new(env.current_contract_address(), amount).verify(&sig);
+        Commitment::new(env.current_contract_address(), amount).verify(&env, &sig);
         let withdrawn: i128 = env.storage().instance().get(&DataKey::Withdrawn).unwrap_or(0);
         let payout = amount - withdrawn;
         if payout > 0 {
