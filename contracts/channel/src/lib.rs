@@ -64,7 +64,7 @@ impl Contract {
     /// Callable by the deployer.
     ///
     /// # Auth
-    /// - `from`: required.
+    /// - `from`: required if amount > 0.
     pub fn __constructor(env: &Env, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, close_waiting_period: u32) {
         assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
 
