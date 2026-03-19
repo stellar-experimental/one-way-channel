@@ -14,6 +14,25 @@ closing it. This avoids per-payment transaction fees and latency.
 - **Recipient (`to`)**: Receives commitments off-chain and can withdraw
   funds on-chain at any time using a signed commitment.
 
+## Expectations
+
+Participants have the following responsibilities to receive the funds owing
+to them.
+
+### Funder
+
+- None.
+
+### Recipient
+
+- Verifies the `refund_waiting_period` at channel creation is long
+  enough to allow them to react to a close event.
+- Verifies the `amount` in each commitment is less than the channels
+  deposited amount.
+- Monitors the channel for [`event::Close`] events.
+- Calls `withdraw` with the highest-value commitment promptly after seeing a
+  close event, before the refund waiting period elapses.
+
 ## State diagram
 
 ```mermaid

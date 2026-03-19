@@ -30,7 +30,7 @@ jobs:
     - run: rustup update
     - run: rustup target add wasm32v1-none
     - uses: stellar/actions/rust-cache@main
-    - run: cargo install --locked stellar-cli --features opt || true
+    - run: curl -fsSL https://github.com/stellar/stellar-cli/raw/main/install.sh | sh
     - run: make build
 
   test:
@@ -41,7 +41,7 @@ jobs:
     - run: rustup update
     - run: rustup target add wasm32v1-none
     - uses: stellar/actions/rust-cache@main
-    - run: cargo install --locked stellar-cli --features opt || true
+    - run: curl -fsSL https://github.com/stellar/stellar-cli/raw/main/install.sh | sh
     - run: make test
 
   fmt:
