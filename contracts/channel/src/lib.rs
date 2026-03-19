@@ -31,10 +31,10 @@
 //! - Verifies the `refund_waiting_period` at channel creation is long
 //!   enough to allow them to react to a close_start event.
 //! - Verifies the `amount` in each commitment is less than the channels
-//!   deposited amount.
+//!   balance.
 //! - Monitors the channel for [`event::Close`] events.
-//! - Calls `close` with the highest-value commitment promptly after seeing a
-//!   close_start event, before the refund waiting period elapses.
+//! - Calls `close` with a commitment promptly after seeing a close_start
+//!   event, before the refund waiting period elapses.
 //!
 //! ## State diagram
 //!
@@ -371,7 +371,6 @@ impl Contract {
 
     /// Close the channel using a signed commitment, withdrawing funds to the
     /// recipient. The committed amount is transferred to the recipient.
-    /// Can be called at any time.
     ///
     /// After transferring, this function automatically attempts to refund the
     /// remaining balance to the funder using `try_transfer`. This refund
