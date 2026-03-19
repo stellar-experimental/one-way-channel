@@ -509,3 +509,55 @@ fn test_refund_after_close() {
     assert_eq!(token.balance(&to), 300);
     assert_eq!(token.balance(&funder), 700);
 }
+
+/// Calling close a second time fails with AlreadyClosed since the first
+/// close sets the effective ledger to the current ledger.
+#[test]
+fn test_close_twice_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[21u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, _token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    let sig1 = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
+    client.close(&300, &sig1);
+
+    // Second close should fail — already closed.
+    let sig2 = Commitment::new(channel_id.clone(), 100).sign(&auth_key);
+    let result = client.try_close(&100, &sig2);
+    assert!(result.is_err());
+}
+
+/// Close panics if the commitment amount exceeds the channel balance.
+#[test]
+#[should_panic(expected = "balance is not sufficient")]
+fn test_close_amount_exceeds_balance() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[22u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, _token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    // Commitment for 600 but channel only has 500.
+    let sig = Commitment::new(channel_id.clone(), 600).sign(&auth_key);
+    client.close(&600, &sig);
+}
