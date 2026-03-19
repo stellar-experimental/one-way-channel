@@ -153,7 +153,7 @@
 #[allow(unused_imports)]
 use soroban_sdk::{assert_with_error, contract, contracterror, contractimpl, contracttype, symbol_short, token, xdr::ToXdr, Address, Bytes, BytesN, Env, Symbol};
 
-mod event;
+pub mod event;
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -217,13 +217,13 @@ impl Contract {
     /// - `token`: The SEP-41 token used for payments.
     /// - `from`: The funder who deposits tokens into the channel.
     /// - `commitment_key`: The ed25519 public key used to verify commitment
-    ///   signatures. See [`Self::prepare_commitment`] for details on
+    ///   signatures. See `prepare_commitment` for details on
     ///   commitments.
-    /// - `to`: The recipient who can [`Self::withdraw`] funds using signed
+    /// - `to`: The recipient who can `withdraw` funds using signed
     ///   commitments.
     /// - `amount`: The initial deposit amount.
     /// - `refund_waiting_period`: The number of ledgers the recipient has to
-    ///   withdraw after [`Self::close`] is called, before [`Self::refund`]
+    ///   withdraw after `close` is called, before `refund`
     ///   becomes available. This value should be large enough to give the
     ///   recipient time to observe a close event and submit a withdrawal,
     ///   otherwise the recipient may not accept the channel. However, it
@@ -365,7 +365,7 @@ impl Contract {
     ///
     /// The returned bytes must be signed by the ed25519 key corresponding to
     /// the `commitment_key` stored in the channel. The resulting signature,
-    /// along with the amount, can be passed to [`Self::withdraw`] by the
+    /// along with the amount, can be passed to `withdraw` by the
     /// recipient to withdraw funds at any time.
     ///
     /// Commitments are typically prepared off-chain. This function is provided
@@ -421,11 +421,11 @@ impl Contract {
     /// still withdraw during the waiting period. After the close is effective,
     /// the funder can call refund to reclaim the remaining balance.
     ///
-    /// **Important:** The recipient should withdraw funds using [`Self::withdraw`]
+    /// **Important:** The recipient should withdraw funds using `withdraw`
     /// whenever they see a [`event::Close`], before the close becomes effective.
     /// After the close is effective the funder can refund the remaining balance.
     /// The recipient can still withdraw even after the close is effective, up
-    /// until [`Self::refund`] is called.
+    /// until `refund` is called.
     ///
     /// Callable by the funder (from).
     ///
