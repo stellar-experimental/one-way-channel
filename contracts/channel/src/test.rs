@@ -18,11 +18,10 @@ fn create_token<'a>(env: &Env) -> (Address, TokenClient<'a>, StellarAssetClient<
     (address.clone(), TokenClient::new(env, &address), StellarAssetClient::new(env, &address))
 }
 
-fn sign_voucher(env: &Env, signing_key: &SigningKey, channel: &Address, token: &Address, amount: i128) -> BytesN<64> {
+fn sign_voucher(env: &Env, signing_key: &SigningKey, channel: &Address, amount: i128) -> BytesN<64> {
     let voucher = Voucher {
         prefix: symbol_short!("chanvchr"),
         channel: channel.clone(),
-        token: token.clone(),
         amount,
     };
     let payload = voucher.to_xdr(env);
@@ -52,7 +51,7 @@ fn test_full_flow() {
     assert_eq!(token.balance(&channel_id), 500);
     assert_eq!(token.balance(&funder), 500);
 
-    let sig = sign_voucher(&env, &auth_key, &channel_id, &token_addr, 400);
+    let sig = sign_voucher(&env, &auth_key, &channel_id, 400);
     client.close_start(&400, &sig);
 
     env.ledger().with_mut(|li| {
@@ -88,10 +87,10 @@ fn test_close_dispute_overwrites() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig1 = sign_voucher(&env, &auth_key, &channel_id, &token_addr, 100);
+    let sig1 = sign_voucher(&env, &auth_key, &channel_id, 100);
     client.close_start(&100, &sig1);
 
-    let sig2 = sign_voucher(&env, &auth_key, &channel_id, &token_addr, 300);
+    let sig2 = sign_voucher(&env, &auth_key, &channel_id, 300);
     client.close_start(&300, &sig2);
 
     env.ledger().with_mut(|li| {
@@ -123,7 +122,7 @@ fn test_close_finish_too_early() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig = sign_voucher(&env, &auth_key, &channel_id, &token_addr, 200);
+    let sig = sign_voucher(&env, &auth_key, &channel_id, 200);
     client.close_start(&200, &sig);
 
     let result = client.try_close_finish();
@@ -149,7 +148,7 @@ fn test_invalid_signature() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig = sign_voucher(&env, &wrong_key, &channel_id, &token_addr, 200);
+    let sig = sign_voucher(&env, &wrong_key, &channel_id, 200);
     let result = client.try_close_start(&200, &sig);
     assert!(result.is_err());
 }
@@ -171,7 +170,7 @@ fn test_close_immediately() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig = sign_voucher(&env, &auth_key, &channel_id, &token_addr, 300);
+    let sig = sign_voucher(&env, &auth_key, &channel_id, 300);
     client.close_immediately(&300, &sig);
 
     assert_eq!(token.balance(&channel_id), 500);
@@ -244,7 +243,7 @@ fn test_refund_during_close_start_fails() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig = sign_voucher(&env, &auth_key, &channel_id, &token_addr, 300);
+    let sig = sign_voucher(&env, &auth_key, &channel_id, 300);
     client.close_start(&300, &sig);
 
     // Refund while close is pending should fail.
@@ -269,7 +268,7 @@ fn test_refund_before_withdraw() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig = sign_voucher(&env, &auth_key, &channel_id, &token_addr, 300);
+    let sig = sign_voucher(&env, &auth_key, &channel_id, 300);
     client.close_immediately(&300, &sig);
 
     // Refund after close but before withdraw returns only the non-closed portion.

@@ -29,17 +29,14 @@ pub enum DataKey {
 pub struct Voucher {
     pub prefix: Symbol,
     pub channel: Address,
-    pub token: Address,
     pub amount: i128,
 }
 
 impl Voucher {
     fn new(env: &Env, amount: i128) -> Self {
-        let token: Address = env.storage().instance().get(&DataKey::Token).unwrap();
         Voucher {
             prefix: symbol_short!("chanvchr"),
             channel: env.current_contract_address(),
-            token,
             amount,
         }
     }

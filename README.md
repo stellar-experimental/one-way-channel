@@ -66,7 +66,6 @@ The voucher is a `Voucher` struct serialized to XDR (ScVal Map):
 |---|---|---|
 | `prefix` | Symbol | `chanvchr` |
 | `channel` | Address | Channel contract address |
-| `token` | Address | SEP-41 token address |
 | `amount` | i128 | Authorized amount |
 
 The funder signs the XDR bytes with their ed25519 key
