@@ -21,7 +21,7 @@ fn create_token<'a>(env: &Env) -> (Address, TokenClient<'a>, StellarAssetClient<
 }
 
 #[test]
-fn test_deploy() {
+fn test_open() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -43,7 +43,7 @@ fn test_deploy() {
 
     // Deploy a channel via the factory.
     let salt = BytesN::from_array(&env, &[0u8; 32]);
-    let channel_id = factory_client.deploy(&salt, &token_addr, &funder, &auth_pubkey, &to, &500i128, &100u32);
+    let channel_id = factory_client.open(&salt, &token_addr, &funder, &auth_pubkey, &to, &500i128, &100u32);
 
     // Verify the channel was funded.
     assert_eq!(token.balance(&channel_id), 500);

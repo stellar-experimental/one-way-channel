@@ -16,11 +16,14 @@
 //!
 //! ## State diagram
 //!
-//! ```text
-//! [*] --> Open --> Closing --> Closed --> [*]
-//!     __constructor   close   [after wait]  refund
+//! ```mermaid
+//! stateDiagram-v2
+//!     [*] --> Open: __constructor
+//!     Open --> Closing: close
+//!     Closing --> Closed: [after wait]
+//!     Closed --> [*]: refund
 //! ```
-//!
+//! 
 //! `top_up` and `withdraw` can be called in any state. After `refund` the
 //! channel balance is zero so there is nothing left to withdraw.
 //!

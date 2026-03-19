@@ -2,24 +2,17 @@
 
 A unidirectional payment channel contract for Soroban (Stellar).
 
-A funder (`from`) deposits tokens into a channel contract destined for a
-recipient (`to`). The funder issues off-chain signed commitments for increasing
-amounts. The recipient can withdraw at any time to claim the committed amount,
-and the funder can close the channel to reclaim the remainder.
+A payment channel allows a funder to make many small payments to a recipient
+off-chain, with only two on-chain transactions: opening the channel and
+closing it. This avoids per-payment transaction fees and latency.
 
-## How it works
+## Participants
 
-1. **Open** -- Deploy the contract with the token, funder, recipient, commitment
-   key, initial deposit, and refund waiting period.
-2. **Off-chain** -- The funder signs commitments (using `prepare_commitment` to
-   get the payload) for increasing amounts and sends them to the recipient.
-3. **Withdraw** -- The recipient withdraws at any time with a commitment, receiving
-   the committed amount. The commitment amount is the total amount, so only the
-   difference from previous withdrawments is transferred.
-4. **Close** -- The funder closes the channel. The close becomes effective after
-   a waiting period. During the waiting period the recipient can still withdraw.
-5. **Refund** -- After the close is effective, the funder calls `refund` to
-   reclaim the remaining balance.
+- **Funder (`from`)**: Deposits tokens into the channel and signs
+  commitments authorizing the recipient to withdraw up to a given cumulative
+  amount.
+- **Recipient (`to`)**: Receives commitments off-chain and can withdraw
+  funds on-chain at any time using a signed commitment.
 
 ## State diagram
 
@@ -30,33 +23,144 @@ stateDiagram-v2
     Closing --> Closed: [after wait]
     Closed --> [*]: refund
 ```
-
+ 
 `top_up` and `withdraw` can be called in any state. After `refund` the
 channel balance is zero so there is nothing left to withdraw.
 
 ## Functions
 
-| Function | Description | Who can call | Auth required |
-|---|---|---|---|
-| `__constructor` | Deploy the contract with the token, funder, recipient, commitment key, initial deposit, and refund waiting period. | Deployer | `from` |
-| `top_up` | Top up the channel with the stored token from the stored from address. | Anyone | `from` |
-| `prepare_commitment` | Returns the commitment payload that needs to be signed by the commitment_key. | Anyone | None |
-| `deposited` | Returns the total amount deposited into the channel. | Anyone | None |
-| `balance` | Returns the balance of the channel. This is the deposited amount minus any amount already withdrawn. | Anyone | None |
-| `withdrawn` | Returns the total cumulative amount already withdrawn by the recipient. | Anyone | None |
-| `withdraw` | Withdraw funds to the recipient using a signed commitment. The amount is the total cumulative entitlement; only the difference from previous withdrawals is transferred. Can be called at any time. | Recipient | `to` + commitment sig |
-| `close` | Close the channel, effective after a waiting period. The recipient can still withdraw during the wait. | Funder | `from` |
-| `refund` | Refund the remaining balance to the funder after the close is effective. | Funder | `from` |
+### Lifecycle
 
-## Commitment format
+| Function | Description |
+|---|---|
+| `__constructor` | Open a channel with an initial deposit. Callable by the funder, or anyone if amount is zero. |
+| `top_up` | Deposit additional tokens into the channel. |
+| `withdraw` | Withdraw funds using a signed commitment. |
+| `close` | Begin closing the channel, effective after a waiting period. |
+| `refund` | Refund the remaining balance to the funder after the close is effective. |
 
-The commitment is a `Commitment` struct serialized to XDR (ScVal Map):
+### Helpers
 
-| Field | Type | Value |
-|---|---|---|
-| `domain` | Symbol | `chancmmt` |
-| `channel` | Address | Channel contract address |
-| `amount` | i128 | Committed amount |
+| Function | Description |
+|---|---|
+| `prepare_commitment` | Generate the commitment bytes to sign. |
 
-The funder signs the XDR bytes with their ed25519 key
-(`commitment_key`). The signature never expires.
+### Getters
+
+| Function | Description |
+|---|---|
+| `token` | Returns the token address. |
+| `from` | Returns the funder address. |
+| `to` | Returns the recipient address. |
+| `refund_waiting_period` | Returns the refund waiting period in ledgers. |
+| `deposited` | Returns the total amount deposited. |
+| `withdrawn` | Returns the total amount already withdrawn. |
+| `balance` | Returns the current balance (deposited minus withdrawn). |
+
+## Lifecycle
+
+### 1. Open
+
+The channel is deployed with a SEP-41 token, funder address, recipient
+address, an ed25519 `commitment_key` (public key), an initial deposit
+amount, and a `refund_waiting_period` (in ledgers).
+
+The funder's tokens are transferred into the channel contract on deployment.
+The funder can also top up the channel later using [`Contract::top_up`], or
+by transferring the token directly to the channel contract address.
+
+### 2. Off-chain payments
+
+The funder makes payments by signing commitments off-chain and sending them
+to the recipient. A commitment authorizes the recipient to withdraw up to a
+**cumulative total** amount. Each new commitment replaces the previous one.
+
+For example:
+- Commitment for 100: recipient can withdraw up to 100.
+- Commitment for 140: recipient can withdraw up to 140 (40 more if 100 was
+  already withdrawn).
+- Commitment for 300: recipient can withdraw up to 300 (160 more if 140 was
+  already withdrawn).
+
+A commitment is an XDR serialized [`Commitment`] struct containing a domain
+separator (`chancmmt`), the network ID, the channel contract address, and
+the amount. The
+funder signs the serialized bytes with the ed25519 key corresponding to the
+`commitment_key`. Use [`Contract::prepare_commitment`] as a convenience to
+generate the bytes to sign.
+
+The serialized commitment is an XDR `ScVal::Map` with four entries
+(sorted alphabetically by key):
+
+```text
+ScVal::Map({
+    Symbol("amount"):  I128(amount),
+    Symbol("channel"): Address(channel_contract_address),
+    Symbol("domain"):  Symbol("chancmmt"),
+    Symbol("network"): BytesN<32>(network_id),
+})
+```
+
+### 3. Withdraw
+
+The recipient calls [`Contract::withdraw`] at any time with a commitment
+amount and its signature. The contract verifies the signature, then
+transfers the difference between the commitment amount and what has already
+been withdrawn. If the commitment amount is less than or equal to what has
+already been withdrawn, no transfer occurs.
+
+The recipient does not need to withdraw after every commitment. They can
+accumulate multiple commitments and withdraw using only the latest (highest
+amount) commitment.
+
+### 4. Close
+
+The funder calls [`Contract::close`] to begin closing the channel. The close
+does not take effect immediately — there is a waiting period of
+`refund_waiting_period` ledgers.
+
+The recipient can still call [`Contract::withdraw`] at any time, including
+after the waiting period has elapsed, up until the funder calls
+[`Contract::refund`]. However, once the waiting period has elapsed the
+funder can call refund at any time, so the recipient should withdraw
+promptly.
+
+**Important:** The recipient should monitor for [`event::Close`] events and
+withdraw before the close becomes effective.
+
+### 5. Refund
+
+After the refund waiting period has elapsed, the funder calls
+[`Contract::refund`] to reclaim whatever balance remains in the channel.
+This transfers the **entire** remaining token balance to the funder,
+including any amount the recipient was entitled to but did not withdraw.
+The contract does not reserve funds for the recipient. If the recipient
+has not withdrawn before the funder calls refund, those funds are lost to
+the recipient and assumed to be of no interest to the recipient.
+
+## Security
+
+- Commitments are signed with an ed25519 key, not a Stellar account. The
+  `commitment_key` is set at deployment and cannot be changed.
+- The commitment includes a domain separator, the network ID, and the
+  channel contract address, preventing signatures from being reused across
+  networks, channels, or confused with other signed payloads.
+- The refund waiting period protects the recipient: it gives them time to
+  withdraw using their latest commitment before the funder can reclaim
+  funds.
+
+# Channel Factory
+
+A factory contract for deploying channel contracts on Soroban (Stellar).
+
+The factory stores a channel contract wasm hash and deploys new channel
+instances using it. An admin can update the wasm hash to deploy newer
+versions of the channel contract.
+
+## Functions
+
+| Function | Description |
+|---|---|
+| `__constructor` | Initialize the factory with an admin and channel wasm hash. |
+| `set_wasm_hash` | Update the stored channel wasm hash. Admin only. |
+| `deploy` | Deploy a new channel contract with the given parameters. |
