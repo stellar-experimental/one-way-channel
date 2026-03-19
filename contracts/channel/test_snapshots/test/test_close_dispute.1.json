@@ -108,7 +108,7 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "close_start",
+              "function_name": "abort_start",
               "args": []
             }
           },
@@ -123,7 +123,7 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "close_immediately",
+              "function_name": "close",
               "args": [
                 {
                   "i128": "300"
@@ -328,7 +328,7 @@
                       "key": {
                         "vec": [
                           {
-                            "symbol": "CloseLedgerCount"
+                            "symbol": "AbortLedgerCount"
                           }
                         ]
                       },

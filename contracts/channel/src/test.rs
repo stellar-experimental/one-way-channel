@@ -40,27 +40,27 @@ fn test_full_flow() {
 
     let to = Address::generate(&env);
     let funder = Address::generate(&env);
-    let close_ledger_count: u32 = 100;
+    let abort_ledger_count: u32 = 100;
 
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, close_ledger_count));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, abort_ledger_count));
     let client = ContractClient::new(&env, &channel_id);
 
     assert_eq!(token.balance(&channel_id), 500);
     assert_eq!(token.balance(&funder), 500);
 
-    client.close_start();
+    client.abort_start();
 
     env.ledger().with_mut(|li| {
-        li.sequence_number += close_ledger_count + 1;
+        li.sequence_number += abort_ledger_count + 1;
     });
 
-    client.close_finish();
+    client.abort_finish();
     assert_eq!(token.balance(&channel_id), 500);
 
-    // close_start/finish closes with amount 0, so full refund.
+    // abort_start/finish closes with amount 0, so full refund.
     client.refund();
     assert_eq!(token.balance(&funder), 1000);
     assert_eq!(token.balance(&channel_id), 0);
@@ -83,12 +83,12 @@ fn test_close_dispute() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    // Funder starts close (would result in full refund).
-    client.close_start();
+    // Funder starts abort (would result in full refund).
+    client.abort_start();
 
-    // Recipient disputes with close_immediately using a voucher for 300.
+    // Recipient disputes with close using a voucher for 300.
     let sig = sign_voucher(&env, &auth_key, &channel_id, 300);
-    client.close_immediately(&300, &sig);
+    client.close(&300, &sig);
 
     client.withdraw();
     client.refund();
@@ -98,7 +98,7 @@ fn test_close_dispute() {
 }
 
 #[test]
-fn test_close_finish_too_early() {
+fn test_abort_finish_too_early() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -114,9 +114,9 @@ fn test_close_finish_too_early() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    client.close_start();
+    client.abort_start();
 
-    let result = client.try_close_finish();
+    let result = client.try_abort_finish();
     assert!(result.is_err());
 }
 
@@ -140,12 +140,12 @@ fn test_invalid_signature() {
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = sign_voucher(&env, &wrong_key, &channel_id, 200);
-    let result = client.try_close_immediately(&200, &sig);
+    let result = client.try_close(&200, &sig);
     assert!(result.is_err());
 }
 
 #[test]
-fn test_close_immediately() {
+fn test_close() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -162,7 +162,7 @@ fn test_close_immediately() {
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = sign_voucher(&env, &auth_key, &channel_id, 300);
-    client.close_immediately(&300, &sig);
+    client.close(&300, &sig);
 
     assert_eq!(token.balance(&channel_id), 500);
 
@@ -217,7 +217,7 @@ fn test_refund_before_close() {
 }
 
 #[test]
-fn test_refund_during_close_start_fails() {
+fn test_refund_during_abort_fails() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -233,9 +233,9 @@ fn test_refund_during_close_start_fails() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    client.close_start();
+    client.abort_start();
 
-    // Refund while close is pending should fail.
+    // Refund while abort is pending should fail.
     let result = client.try_refund();
     assert!(result.is_err());
 }
@@ -258,7 +258,7 @@ fn test_refund_before_withdraw() {
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = sign_voucher(&env, &auth_key, &channel_id, 300);
-    client.close_immediately(&300, &sig);
+    client.close(&300, &sig);
 
     // Refund after close but before withdraw returns only the non-closed portion.
     client.refund();

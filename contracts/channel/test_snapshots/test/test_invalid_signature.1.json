@@ -213,7 +213,7 @@
                       "key": {
                         "vec": [
                           {
-                            "symbol": "CloseLedgerCount"
+                            "symbol": "AbortLedgerCount"
                           }
                         ]
                       },

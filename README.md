@@ -10,15 +10,15 @@ authorized amount, and the funder can reclaim the remainder.
 ## How it works
 
 1. **Open** -- Deploy the contract with the token, funder, recipient, voucher
-   auth key, initial deposit, and close ledger count.
+   auth key, initial deposit, and abort ledger count.
 2. **Off-chain** -- The funder signs vouchers (using `prepare_voucher` to get
    the payload) for increasing amounts and sends them to the recipient.
-3. **Close immediately** -- The recipient closes the channel immediately with a
-   voucher. This is the typical way to close a channel.
-4. **Close start/finish** -- If the recipient doesn't close the channel, the
-   funder can start a close with a declared amount. After a waiting period
-   anyone can finish the close. During the waiting period the recipient can
-   dispute by calling `close_immediately` with a voucher.
+3. **Close** -- The recipient closes the channel with a voucher. This is the
+   typical way to close a channel.
+4. **Abort start/finish** -- If the recipient doesn't close the channel, the
+   funder can start an abort. After a waiting period anyone can finish the
+   abort, resulting in a full refund. During the waiting period the recipient
+   can dispute by calling `close` with a voucher.
 5. **Withdraw** -- After close, anyone calls `withdraw` to transfer the closed
    amount to the recipient.
 6. **Refund** -- The funder calls `refund` to reclaim the remainder.
@@ -30,11 +30,11 @@ stateDiagram-v2
     [*] --> Open: __constructor
 
     Open --> Open: top_up
-    Open --> Closing: close_start
-    Open --> Closed: close_immediately(voucher)
+    Open --> Aborting: abort_start
+    Open --> Closed: close(voucher)
 
-    Closing --> Closed: close_finish [after close_at_ledger]
-    Closing --> Closed: close_immediately(voucher) [dispute]
+    Aborting --> Closed: abort_finish [after abort_at_ledger]
+    Aborting --> Closed: close(voucher) [dispute]
 
     Closed --> Withdrawn: withdraw
     Closed --> Closed: refund [remainder only]
@@ -46,13 +46,13 @@ stateDiagram-v2
 
 | Function | Description | Who can call | Auth required |
 |---|---|---|---|
-| `__constructor` | Deploy the contract with the token, funder, recipient, voucher auth key, initial deposit, and close ledger count. | Deployer | `from` |
+| `__constructor` | Deploy the contract with the token, funder, recipient, voucher auth key, initial deposit, and abort ledger count. | Deployer | `from` |
 | `top_up` | Top up the channel with the stored token from the stored from address. | Anyone | `from` |
 | `prepare_voucher` | Returns the voucher payload that needs to be signed by the from_voucher_auth_key. | Anyone | None |
 | `balance_deposited` | Returns the total amount deposited in the channel. | Anyone | None |
-| `close_start` | Start closing the channel. If undisputed, results in a full refund to the funder. | Funder | `from` |
-| `close_finish` | Finish the close after the close_at_ledger has been reached. Closes with amount 0, resulting in a full refund. | Anyone | None |
-| `close_immediately` | Close the channel immediately by submitting a voucher. No waiting period. | Recipient | `to` + voucher sig |
+| `abort_start` | Start aborting the channel. If undisputed, results in a full refund to the funder. | Funder | `from` |
+| `abort_finish` | Finish the abort after the abort_at_ledger has been reached. Closes with amount 0, resulting in a full refund. | Anyone | None |
+| `close` | Close the channel by submitting a voucher. No waiting period. | Recipient | `to` + voucher sig |
 | `withdraw` | Withdraw the authorized amount to `to` after the channel is closed. | Anyone | None |
 | `refund` | Refund the funder's portion of the balance. Can be called after the channel is closed. | Funder | `from` |
 

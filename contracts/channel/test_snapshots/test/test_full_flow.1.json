@@ -110,7 +110,7 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "close_start",
+              "function_name": "abort_start",
               "args": []
             }
           },
@@ -288,7 +288,7 @@
                       "key": {
                         "vec": [
                           {
-                            "symbol": "CloseLedgerCount"
+                            "symbol": "AbortLedgerCount"
                           }
                         ]
                       },

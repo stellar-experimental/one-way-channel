@@ -8,8 +8,8 @@ use events::*;
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    NotClosing = 1,
-    ClosePeriodNotElapsed = 2,
+    NotAborting = 1,
+    AbortPeriodNotElapsed = 2,
     NotClosed = 3,
     NotRefundable = 4,
 }
@@ -20,8 +20,8 @@ pub enum DataKey {
     From,
     FromVoucherAuthKey,
     To,
-    CloseLedgerCount,
-    Close,
+    AbortLedgerCount,
+    Abort,
     Closed,
 }
 
@@ -53,8 +53,8 @@ impl Voucher {
 }
 
 #[contracttype]
-pub struct Close {
-    pub close_at_ledger: u32,
+pub struct Abort {
+    pub abort_at_ledger: u32,
 }
 
 #[contract]
@@ -62,12 +62,12 @@ pub struct Contract;
 
 #[contractimpl]
 impl Contract {
-    pub fn __constructor(env: Env, token: Address, from: Address, from_voucher_auth_key: BytesN<32>, to: Address, amount: i128, close_ledger_count: u32) {
+    pub fn __constructor(env: Env, token: Address, from: Address, from_voucher_auth_key: BytesN<32>, to: Address, amount: i128, abort_ledger_count: u32) {
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::From, &from);
         env.storage().instance().set(&DataKey::FromVoucherAuthKey, &from_voucher_auth_key);
         env.storage().instance().set(&DataKey::To, &to);
-        env.storage().instance().set(&DataKey::CloseLedgerCount, &close_ledger_count);
+        env.storage().instance().set(&DataKey::AbortLedgerCount, &abort_ledger_count);
         Self::top_up(env.clone(), amount);
         env.events().publish_event(&OpenEvent {
             from,
@@ -75,7 +75,7 @@ impl Contract {
             to,
             token,
             amount,
-            close_ledger_count,
+            abort_ledger_count,
         });
     }
 
@@ -102,7 +102,7 @@ impl Contract {
     }
 
     /// Returns the voucher payload that needs to be signed by the from_voucher_auth_key.
-    /// The signed voucher can be passed to close_immediately.
+    /// The signed voucher can be passed to close.
     /// Called by anyone.
     ///
     /// # Auth
@@ -111,52 +111,52 @@ impl Contract {
         Voucher::new(&env, amount).into_bytes(&env)
     }
 
-    /// Start closing the channel. If undisputed, close_finish will result in a
+    /// Start aborting the channel. If undisputed, abort_finish will result in a
     /// full refund to the funder. The recipient can dispute by calling
-    /// close_immediately with a voucher during the waiting period.
+    /// close with a voucher during the waiting period.
     /// Called by the funder (from).
     ///
     /// # Auth
     /// - `from`: required.
-    pub fn close_start(env: Env) {
+    pub fn abort_start(env: Env) {
         let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
         from.require_auth();
-        let close_ledger_count: u32 = env.storage().instance().get(&DataKey::CloseLedgerCount).unwrap();
-        let close_at_ledger = env.ledger().sequence() + close_ledger_count;
-        env.storage().instance().set(&DataKey::Close, &Close { close_at_ledger });
-        env.events().publish_event(&CloseStartEvent { close_at_ledger });
+        let abort_ledger_count: u32 = env.storage().instance().get(&DataKey::AbortLedgerCount).unwrap();
+        let abort_at_ledger = env.ledger().sequence() + abort_ledger_count;
+        env.storage().instance().set(&DataKey::Abort, &Abort { abort_at_ledger });
+        env.events().publish_event(&AbortStartEvent { abort_at_ledger });
     }
 
-    /// Finish the close after the close_at_ledger has been reached.
+    /// Finish the abort after the abort_at_ledger has been reached.
     /// Closes the channel with amount 0, resulting in a full refund to the funder.
     /// Called by anyone.
     ///
     /// # Auth
     /// None.
-    pub fn close_finish(env: Env) -> Result<(), Error> {
-        let close: Close = env.storage().instance().get(&DataKey::Close).ok_or(Error::NotClosing)?;
+    pub fn abort_finish(env: Env) -> Result<(), Error> {
+        let abort: Abort = env.storage().instance().get(&DataKey::Abort).ok_or(Error::NotAborting)?;
 
-        if env.ledger().sequence() < close.close_at_ledger {
-            return Err(Error::ClosePeriodNotElapsed);
+        if env.ledger().sequence() < abort.abort_at_ledger {
+            return Err(Error::AbortPeriodNotElapsed);
         }
 
-        env.storage().instance().remove(&DataKey::Close);
+        env.storage().instance().remove(&DataKey::Abort);
         env.storage().instance().set(&DataKey::Closed, &0i128);
         env.events().publish_event(&ClosedEvent { amount: 0 });
         Ok(())
     }
 
-    /// Close the channel immediately by submitting a voucher. No waiting period.
+    /// Close the channel by submitting a voucher. No waiting period.
     /// Called by the recipient (to).
     ///
     /// # Auth
     /// - `to`: required.
     /// - Voucher signature serves as from_voucher_auth_key authorization.
-    pub fn close_immediately(env: Env, amount: i128, sig: BytesN<64>) {
+    pub fn close(env: Env, amount: i128, sig: BytesN<64>) {
         let to: Address = env.storage().instance().get(&DataKey::To).unwrap();
         to.require_auth();
         Voucher::new(&env, amount).verify(&env, &sig);
-        env.storage().instance().remove(&DataKey::Close);
+        env.storage().instance().remove(&DataKey::Abort);
         env.storage().instance().set(&DataKey::Closed, &amount);
         env.events().publish_event(&ClosedEvent { amount });
     }

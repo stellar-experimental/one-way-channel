@@ -9,15 +9,15 @@ pub struct OpenEvent {
     pub to: Address,
     pub token: Address,
     pub amount: i128,
-    pub close_ledger_count: u32,
+    pub abort_ledger_count: u32,
 }
 
-/// Emitted when a close is started via close_start. The close_at_ledger is the
-/// ledger at which close_finish can be called.
+/// Emitted when an abort is started via abort_start. The abort_at_ledger is the
+/// ledger at which abort_finish can be called.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CloseStartEvent {
-    pub close_at_ledger: u32,
+pub struct AbortStartEvent {
+    pub abort_at_ledger: u32,
 }
 
 /// Emitted when the channel is closed via close_finish or close_immediately.
