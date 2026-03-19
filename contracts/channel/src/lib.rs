@@ -210,7 +210,7 @@ impl Contract {
     /// # Auth
     /// - `from`: required if amount > 0.
     pub fn __constructor(env: &Env, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, close_waiting_period: u32) {
-        assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
+        assert_with_error!(env, amount >= 0, Error::NegativeAmount);
 
         // Store channel configuration.
         env.storage().instance().set(&DataKey::Token, &token);
@@ -243,7 +243,7 @@ impl Contract {
     /// # Auth
     /// - `from`: required.
     pub fn top_up(env: &Env, amount: i128) {
-        assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
+        assert_with_error!(env, amount >= 0, Error::NegativeAmount);
         if amount > 0 {
             // Transfer tokens from the funder to the channel.
             let from = Self::from(env);

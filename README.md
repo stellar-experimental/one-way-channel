@@ -56,7 +56,7 @@ The commitment is a `Commitment` struct serialized to XDR (ScVal Map):
 
 | Field | Type | Value |
 |---|---|---|
-| `prefix` | Symbol | `chancmmt` |
+| `domain` | Symbol | `chancmmt` |
 | `channel` | Address | Channel contract address |
 | `amount` | i128 | Committed amount |
 
