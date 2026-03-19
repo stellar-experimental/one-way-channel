@@ -1,5 +1,6 @@
 #![no_std]
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, symbol_short, token, xdr::ToXdr, Address, Bytes, BytesN, Env, Symbol};
+#[allow(unused_imports)]
+use soroban_sdk::{assert_with_error, contract, contracterror, contractimpl, contracttype, symbol_short, token, xdr::ToXdr, Address, Bytes, BytesN, Env, Symbol};
 
 mod events;
 use events::*;
@@ -65,13 +66,18 @@ impl Contract {
     /// # Auth
     /// - `from`: required.
     pub fn __constructor(env: &Env, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, close_ledger_count: u32) {
-        soroban_sdk::assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
+        assert_with_error!(env, amount >= 0, Error::NegativeAmount);
+
+        // Store channel configuration.
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::From, &from);
         env.storage().instance().set(&DataKey::CommitmentKey, &commitment_key);
         env.storage().instance().set(&DataKey::To, &to);
         env.storage().instance().set(&DataKey::CloseLedgerCount, &close_ledger_count);
+
+        // Deposit initial funds.
         Self::top_up(env, amount);
+
         env.events().publish_event(&OpenEvent {
             from,
             commitment_key,
@@ -89,8 +95,9 @@ impl Contract {
     /// # Auth
     /// - `from`: required.
     pub fn top_up(env: &Env, amount: i128) {
-        soroban_sdk::assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
+        assert_with_error!(env, amount >= 0, Error::NegativeAmount);
         if amount > 0 {
+            // Transfer tokens from the funder to the channel.
             let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
             from.require_auth();
             Self::token_client(env).transfer(&from, &env.current_contract_address(), &amount);
@@ -136,7 +143,7 @@ impl Contract {
     /// # Auth
     /// None.
     pub fn prepare_commitment(env: &Env, amount: i128) -> Bytes {
-        soroban_sdk::assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
+        assert_with_error!(env, amount >= 0, Error::NegativeAmount);
         Commitment::new(env.current_contract_address(), amount).into_bytes()
     }
 
@@ -147,7 +154,9 @@ impl Contract {
     ///
     /// The withdrawal amount is not configurable. Each call withdraws exactly
     /// the amount needed to bring the total withdrawn up to the amount
-    /// authorized by the signed commitment.
+    /// authorized by the signed commitment. If an older commitment with a
+    /// lower amount is used after a higher amount has already been withdrawn,
+    /// no funds are transferred.
     ///
     /// Callable by the recipient (to).
     ///
@@ -155,10 +164,14 @@ impl Contract {
     /// - `to`: required.
     /// - Commitment signature serves as commitment_key authorization.
     pub fn withdraw(env: &Env, amount: i128, sig: BytesN<64>) {
-        soroban_sdk::assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
+        assert_with_error!(env, amount >= 0, Error::NegativeAmount);
+
+        // Verify the recipient and commitment signature.
         let to: Address = env.storage().instance().get(&DataKey::To).unwrap();
         to.require_auth();
         Commitment::new(env.current_contract_address(), amount).verify(&sig);
+
+        // Transfer only the difference from what has already been withdrawn.
         let withdrawn: i128 = env.storage().instance().get(&DataKey::Withdrawn).unwrap_or(0);
         let payout = amount - withdrawn;
         if payout > 0 {
@@ -177,11 +190,15 @@ impl Contract {
     /// # Auth
     /// - `from`: required.
     pub fn close(env: &Env) {
+        // Verify the funder.
         let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
         from.require_auth();
+
+        // Set the close effective ledger.
         let close_ledger_count: u32 = env.storage().instance().get(&DataKey::CloseLedgerCount).unwrap();
         let effective_at_ledger = env.ledger().sequence() + close_ledger_count;
         env.storage().instance().set(&DataKey::Closed, &effective_at_ledger);
+
         env.events().publish_event(&CloseEvent { effective_at_ledger });
     }
 
@@ -192,12 +209,17 @@ impl Contract {
     /// # Auth
     /// - `from`: required.
     pub fn refund(env: &Env) -> Result<(), Error> {
+        // Verify the close is effective.
         let effective_at_ledger: u32 = env.storage().instance().get(&DataKey::Closed).ok_or(Error::NotClosed)?;
         if env.ledger().sequence() < effective_at_ledger {
             return Err(Error::ClosePeriodNotElapsed);
         }
+
+        // Verify the funder.
         let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
         from.require_auth();
+
+        // Transfer the remaining balance to the funder.
         let tc = Self::token_client(env);
         let balance = tc.balance(&env.current_contract_address());
         if balance > 0 {
