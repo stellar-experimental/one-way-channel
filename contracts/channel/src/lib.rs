@@ -21,7 +21,7 @@
 //!
 //! ### Funder
 //!
-//! - None.
+//! - Keeping the commitment key secret.
 //!
 //! ### Recipient
 //!
