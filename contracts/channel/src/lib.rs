@@ -154,6 +154,9 @@ impl Contract {
     /// Can be called again to overwrite a pending close.
     /// Called by anyone with a valid voucher.
     ///
+    /// Note: The recipient should prefer close_immediately since holding a voucher
+    /// and being the recipient they can authorize an immediate exit without waiting.
+    ///
     /// # Auth
     /// None. The voucher signature serves as authorization.
     pub fn close_start(env: Env, amount: i128, sig: BytesN<64>) {
