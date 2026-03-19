@@ -4,8 +4,8 @@ A unidirectional payment channel contract for Soroban (Stellar).
 
 A funder (`from`) deposits tokens into a channel contract destined for a
 recipient (`to`). The funder issues off-chain signed commitments for increasing
-amounts. The recipient can close the channel at any time to claim the
-committed amount, and the funder can reclaim the remainder.
+amounts. The recipient can settle at any time to claim the committed amount,
+and the funder can close the channel to reclaim the remainder.
 
 ## How it works
 
@@ -13,16 +13,13 @@ committed amount, and the funder can reclaim the remainder.
    key, initial deposit, and close ledger count.
 2. **Off-chain** -- The funder signs commitments (using `prepare_commitment` to
    get the payload) for increasing amounts and sends them to the recipient.
-3. **Close with commitment** -- The recipient closes the channel with a
-   commitment. This is the typical way to close a channel.
-4. **Close** -- If the recipient doesn't close the channel, the funder can
-   close it. The close becomes effective after a waiting period, resulting
-   in a full refund. During the waiting period the recipient can update the
-   amount by calling `close_with_commitment`.
-5. **Withdraw** -- After close is effective, anyone calls `withdraw` to transfer
-   the closed amount to the recipient.
-6. **Refund** -- After close is effective, the funder calls `refund` to reclaim
-   the remainder.
+3. **Settle** -- The recipient settles at any time with a commitment, receiving
+   the committed amount. The amount is cumulative, so only the difference from
+   previous settlements is transferred.
+4. **Close** -- The funder closes the channel. The close becomes effective after
+   a waiting period. During the waiting period the recipient can still settle.
+5. **Refund** -- After the close is effective, the funder calls `refund` to
+   reclaim the remaining balance.
 
 ## State diagram
 
@@ -31,10 +28,13 @@ stateDiagram-v2
     [*] --> Open: __constructor
 
     Open --> Open: top_up
-    Open --> Closed: close [after wait]
-    Open --> Closed: close_with_commitment
+    Open --> Open: settle
+    Open --> Closing: close
 
-    Closed --> [*]: withdraw & refund
+    Closing --> Closing: settle
+    Closing --> Closed: [after wait]
+
+    Closed --> [*]: refund
 ```
 
 ## Functions
@@ -45,10 +45,9 @@ stateDiagram-v2
 | `top_up` | Top up the channel with the stored token from the stored from address. | Anyone | `from` |
 | `prepare_commitment` | Returns the commitment payload that needs to be signed by the commitment_key. | Anyone | None |
 | `balance_deposited` | Returns the total amount deposited in the channel. | Anyone | None |
-| `close` | Close the channel with amount 0, effective after a waiting period. The recipient can update the amount with `close_with_commitment`. | Funder | `from` |
-| `close_with_commitment` | Close the channel by submitting a commitment. Effective immediately. | Recipient | `to` + commitment sig |
-| `withdraw` | Withdraw the committed amount to `to` after the close is effective. | Anyone | None |
-| `refund` | Refund the funder's portion of the balance after the close is effective. | Funder | `from` |
+| `settle` | Settle the committed amount to the recipient. Cumulative, only pays the difference. Can be called at any time. | Recipient | `to` + commitment sig |
+| `close` | Close the channel, effective after a waiting period. The recipient can still settle during the wait. | Funder | `from` |
+| `refund` | Refund the remaining balance to the funder after the close is effective. | Funder | `from` |
 
 ## Commitment format
 
@@ -58,7 +57,7 @@ The commitment is a `Commitment` struct serialized to XDR (ScVal Map):
 |---|---|---|
 | `prefix` | Symbol | `chancmmt` |
 | `channel` | Address | Channel contract address |
-| `amount` | i128 | Authorized amount |
+| `amount` | i128 | Committed amount |
 
 The funder signs the XDR bytes with their ed25519 key
 (`commitment_key`). The signature never expires.

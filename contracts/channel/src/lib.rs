@@ -19,6 +19,7 @@ pub enum DataKey {
     CommitmentKey,
     To,
     CloseLedgerCount,
+    Settled,
     Closed,
 }
 
@@ -47,12 +48,6 @@ impl Commitment {
         let payload = self.into_bytes(env);
         env.crypto().ed25519_verify(&commitment_key, &payload, sig);
     }
-}
-
-#[contracttype]
-pub struct Closed {
-    pub amount: i128,
-    pub effective_at_ledger: u32,
 }
 
 #[contract]
@@ -100,8 +95,7 @@ impl Contract {
     }
 
     /// Returns the commitment payload that needs to be signed by the
-    /// commitment_key. The signed commitment can be passed to
-    /// close_with_commitment.
+    /// commitment_key. The signed commitment can be passed to settle.
     /// Called by anyone.
     ///
     /// # Auth
@@ -110,83 +104,60 @@ impl Contract {
         Commitment::new(&env, amount).into_bytes(&env)
     }
 
-    /// Close the channel with the given amount, effective after a waiting
-    /// period. The recipient can update the amount by calling
-    /// close_with_commitment before the close becomes effective.
-    /// Called by the funder (from).
-    ///
-    /// # Auth
-    /// - `from`: required.
-    pub fn close(env: Env, amount: i128) {
-        let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
-        from.require_auth();
-        let close_ledger_count: u32 = env.storage().instance().get(&DataKey::CloseLedgerCount).unwrap();
-        let effective_at_ledger = env.ledger().sequence() + close_ledger_count;
-        env.storage().instance().set(&DataKey::Closed, &Closed { amount, effective_at_ledger });
-        env.events().publish_event(&CloseEvent { effective_at_ledger });
-    }
-
-    /// Close the channel by submitting a commitment. Effective immediately.
+    /// Settle the committed amount to the recipient. The commitment amount is
+    /// the total amount, so only the difference from what has already been settled is
+    /// transferred. Can be called at any time.
     /// Called by the recipient (to).
     ///
     /// # Auth
     /// - `to`: required.
     /// - Commitment signature serves as commitment_key authorization.
-    pub fn close_with_commitment(env: Env, amount: i128, sig: BytesN<64>) {
+    pub fn settle(env: Env, amount: i128, sig: BytesN<64>) {
         let to: Address = env.storage().instance().get(&DataKey::To).unwrap();
         to.require_auth();
         Commitment::new(&env, amount).verify(&env, &sig);
-        let effective_at_ledger = env.ledger().sequence();
-        env.storage().instance().set(&DataKey::Closed, &Closed { amount, effective_at_ledger });
-        env.events().publish_event(&ClosedEvent { amount });
+        let settled: i128 = env.storage().instance().get(&DataKey::Settled).unwrap_or(0);
+        let payout = amount - settled;
+        if payout > 0 {
+            env.storage().instance().set(&DataKey::Settled, &amount);
+            Self::token_client(&env).transfer(&env.current_contract_address(), &to, &payout);
+            env.events().publish_event(&SettleEvent { to, amount: payout });
+        }
     }
 
-    /// Withdraw the committed amount to `to` after the channel is closed.
-    /// Called by anyone.
+    /// Close the channel, effective after a waiting period. The recipient can
+    /// still settle during the waiting period. After the close is effective,
+    /// the funder can call refund to reclaim the remaining balance.
+    /// Called by the funder (from).
     ///
     /// # Auth
-    /// None.
-    pub fn withdraw(env: Env) -> Result<(), Error> {
-        let closed: Closed = env.storage().instance().get(&DataKey::Closed).ok_or(Error::NotClosed)?;
-        if env.ledger().sequence() < closed.effective_at_ledger {
-            return Err(Error::ClosePeriodNotElapsed);
-        }
-        if closed.amount == 0 {
-            return Err(Error::NotClosed);
-        }
-        let to: Address = env.storage().instance().get(&DataKey::To).unwrap();
-        env.storage().instance().set(
-            &DataKey::Closed,
-            &Closed {
-                amount: 0,
-                effective_at_ledger: closed.effective_at_ledger,
-            },
-        );
-        Self::token_client(&env).transfer(&env.current_contract_address(), &to, &closed.amount);
-        env.events().publish_event(&WithdrawEvent { to, amount: closed.amount });
-        Ok(())
+    /// - `from`: required.
+    pub fn close(env: Env) {
+        let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
+        from.require_auth();
+        let close_ledger_count: u32 = env.storage().instance().get(&DataKey::CloseLedgerCount).unwrap();
+        let effective_at_ledger = env.ledger().sequence() + close_ledger_count;
+        env.storage().instance().set(&DataKey::Closed, &effective_at_ledger);
+        env.events().publish_event(&CloseEvent { effective_at_ledger });
     }
 
-    /// Refund the funder's portion of the balance.
-    /// Can be called after the channel is closed. The refundable amount is
-    /// the balance minus the closed amount (if not yet withdrawn).
+    /// Refund the remaining balance to the funder after the close is effective.
     /// Called by the funder (from).
     ///
     /// # Auth
     /// - `from`: required.
     pub fn refund(env: Env) -> Result<(), Error> {
-        let closed: Closed = env.storage().instance().get(&DataKey::Closed).ok_or(Error::NotClosed)?;
-        if env.ledger().sequence() < closed.effective_at_ledger {
+        let effective_at_ledger: u32 = env.storage().instance().get(&DataKey::Closed).ok_or(Error::NotClosed)?;
+        if env.ledger().sequence() < effective_at_ledger {
             return Err(Error::ClosePeriodNotElapsed);
         }
         let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
         from.require_auth();
         let tc = Self::token_client(&env);
         let balance = tc.balance(&env.current_contract_address());
-        let refundable = balance - closed.amount;
-        if refundable > 0 {
-            tc.transfer(&env.current_contract_address(), &from, &refundable);
-            env.events().publish_event(&RefundEvent { from, amount: refundable });
+        if balance > 0 {
+            tc.transfer(&env.current_contract_address(), &from, &balance);
+            env.events().publish_event(&RefundEvent { from, amount: balance });
         }
         Ok(())
     }

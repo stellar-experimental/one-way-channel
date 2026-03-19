@@ -19,17 +19,10 @@ pub struct CloseEvent {
     pub effective_at_ledger: u32,
 }
 
-/// Emitted when the channel is closed via close_with_commitment.
+/// Emitted when the recipient settles via settle.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ClosedEvent {
-    pub amount: i128,
-}
-
-/// Emitted when the closed amount is withdrawn to the recipient.
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WithdrawEvent {
+pub struct SettleEvent {
     pub to: Address,
     pub amount: i128,
 }
