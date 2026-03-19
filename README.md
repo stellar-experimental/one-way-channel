@@ -32,7 +32,6 @@ stateDiagram-v2
     Open --> Open: top_up
     Open --> Closing: close_start(voucher)
     Open --> Closed: close_immediately(voucher)
-    Open --> [*]: refund
 
     Closing --> Closing: close_start(voucher) [dispute]
     Closing --> Closed: close_finish [after close_at_ledger]

@@ -214,16 +214,15 @@ fn test_refund_before_close() {
     let to = Address::generate(&env);
     let funder = Address::generate(&env);
 
-    let (token_addr, token, asset_admin) = create_token(&env);
+    let (token_addr, _token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    // Refund before close returns all funds (no closed amount reserved).
-    client.refund();
-    assert_eq!(token.balance(&funder), 1000);
-    assert_eq!(token.balance(&channel_id), 0);
+    // Refund before close should fail.
+    let result = client.try_refund();
+    assert!(result.is_err());
 }
 
 #[test]

@@ -173,8 +173,11 @@ impl Contract {
     /// None.
     pub fn withdraw(env: Env) -> Result<(), Error> {
         let amount: i128 = env.storage().instance().get(&DataKey::Closed).ok_or(Error::NotClosed)?;
+        if amount == 0 {
+            return Err(Error::NotClosed);
+        }
         let to: Address = env.storage().instance().get(&DataKey::To).unwrap();
-        env.storage().instance().remove(&DataKey::Closed);
+        env.storage().instance().set(&DataKey::Closed, &0i128);
         Self::token_client(&env).transfer(&env.current_contract_address(), &to, &amount);
         env.events().publish_event(&WithdrawEvent { to, amount });
         Ok(())
@@ -188,10 +191,7 @@ impl Contract {
     /// # Auth
     /// - `from`: required.
     pub fn refund(env: Env) -> Result<(), Error> {
-        if env.storage().instance().has(&DataKey::Close) {
-            return Err(Error::NotRefundable);
-        }
-        let closed_amount: i128 = env.storage().instance().get(&DataKey::Closed).unwrap_or(0);
+        let closed_amount: i128 = env.storage().instance().get(&DataKey::Closed).ok_or(Error::NotClosed)?;
         let from: Address = env.storage().instance().get(&DataKey::From).unwrap();
         from.require_auth();
         let tc = Self::token_client(&env);
