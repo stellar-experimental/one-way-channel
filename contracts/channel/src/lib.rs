@@ -40,47 +40,22 @@
 //!   already withdrawn).
 //!
 //! A commitment is an XDR serialized [`Commitment`] struct containing a domain
-//! separator (`chancmmt`), the channel contract address, and the amount. The
+//! separator (`chancmmt`), the network ID, the channel contract address, and
+//! the amount. The
 //! funder signs the serialized bytes with the ed25519 key corresponding to the
 //! `commitment_key`. Use [`Contract::prepare_commitment`] as a convenience to
 //! generate the bytes to sign.
 //!
-//! The serialized commitment is an XDR `ScVal::Map` with three entries:
+//! The serialized commitment is an XDR `ScVal::Map` with four entries
+//! (sorted alphabetically by key):
 //!
 //! ```text
 //! ScVal::Map({
 //!     Symbol("amount"):  I128(amount),
 //!     Symbol("channel"): Address(channel_contract_address),
 //!     Symbol("domain"):  Symbol("chancmmt"),
+//!     Symbol("network"): BytesN<32>(network_id),
 //! })
-//! ```
-//!
-//! The XDR bytes of a commitment for amount 100 with a zero channel address
-//! look like:
-//!
-//! ```text
-//! 00000000  00 00 00 0e 00 00 00 03  00 00 00 0f 00 00 00 06  |................|
-//!           \-- ScVal  | \-- 3 entries | \-- key:  | \-- 6 chars
-//!              Map     |               |    Symbol |
-//! 00000010  61 6d 6f 75 6e 74 00 00  00 00 00 0a 00 00 00 00  |amount....\-----|
-//!           |--- "amount" ---|        | \-- val: I128          |
-//! 00000020  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 64  |...............d|
-//!           |-------------- hi: 0 ----------| |--- lo: 100 ---|
-//! 00000030  00 00 00 0f 00 00 00 07  63 68 61 6e 6e 65 6c 00  |........channel.|
-//!           | \-- key:  | \-- 7 chars |-- "channel" --|
-//!           |    Symbol |
-//! 00000040  00 00 00 12 00 00 00 00  00 00 00 00 00 00 00 00  |................|
-//!           | \-- val:   |------------ 32-byte ---------------|
-//!           |    Address
-//! 00000050  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
-//! 00000060  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
-//!           |------------- contract address ---------------|
-//! 00000070  00 00 00 0f 00 00 00 06  64 6f 6d 61 69 6e 00 00  |........domain..|
-//!           | \-- key:  | \-- 6 chars |--- "domain" ---|
-//!           |    Symbol |
-//! 00000080  00 00 00 0f 00 00 00 08  63 68 61 6e 63 6d 6d 74  |........chancmmt|
-//!           | \-- val:  | \-- 8 chars |--- "chancmmt" -|
-//!           |    Symbol |
 //! ```
 //!
 //! ### 3. Withdraw
@@ -120,13 +95,58 @@
 //! has not withdrawn before the funder calls refund, those funds are lost to
 //! the recipient and assumed to be of no interest to the recipient.
 //!
+//! ## State diagram
+//!
+//! ```text
+//! [*] --> Open --> Closing --> Closed --> [*]
+//!     __constructor   close   [after wait]  refund
+//! ```
+//!
+//! `top_up` and `withdraw` can be called in any state. After `refund` the
+//! channel balance is zero so there is nothing left to withdraw.
+//!
+//! ## Functions
+//!
+//! ### Lifecycle
+//!
+//! | Function | Description |
+//! |---|---|
+//! | `__constructor` | Open a channel with an initial deposit. Callable by the funder, or anyone if amount is zero. |
+//! | `close` | Begin closing the channel, effective after a waiting period. |
+//! | `refund` | Refund the remaining balance to the funder after the close is effective. |
+//!
+//! ### Funding
+//!
+//! | Function | Description |
+//! |---|---|
+//! | `top_up` | Deposit additional tokens into the channel. |
+//!
+//! ### Commitments & Withdrawals
+//!
+//! | Function | Description |
+//! |---|---|
+//! | `prepare_commitment` | Generate the commitment bytes to sign. |
+//! | `withdraw` | Withdraw funds using a signed commitment. |
+//!
+//! ### Getters
+//!
+//! | Function | Description |
+//! |---|---|
+//! | `token` | Returns the token address. |
+//! | `from` | Returns the funder address. |
+//! | `to` | Returns the recipient address. |
+//! | `refund_waiting_period` | Returns the refund waiting period in ledgers. |
+//! | `deposited` | Returns the total amount deposited. |
+//! | `withdrawn` | Returns the total amount already withdrawn. |
+//! | `balance` | Returns the current balance (deposited minus withdrawn). |
+//!
 //! ## Security
 //!
 //! - Commitments are signed with an ed25519 key, not a Stellar account. The
 //!   `commitment_key` is set at deployment and cannot be changed.
-//! - The commitment includes a domain separator and the channel contract
-//!   address, preventing signatures from being reused across channels or
-//!   confused with other signed payloads.
+//! - The commitment includes a domain separator, the network ID, and the
+//!   channel contract address, preventing signatures from being reused across
+//!   networks, channels, or confused with other signed payloads.
 //! - The refund waiting period protects the recipient: it gives them time to
 //!   withdraw using their latest commitment before the funder can reclaim
 //!   funds.
