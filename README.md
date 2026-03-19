@@ -34,9 +34,15 @@ stateDiagram-v2
     Closed --> [*]: refund
 
     note right of Open
-        top_up, settle
+        top_up
+    end note
+    note left of Open
+        settle
     end note
     note right of Closing
+        top_up
+    end note
+    note left of Closing
         settle
     end note
 ```
