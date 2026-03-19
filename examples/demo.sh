@@ -106,7 +106,7 @@ stellar contract invoke \
     -- close
 
 echo ""
-echo "=== Recipient withdraws using commitment 4 (during close waiting period) ==="
+echo "=== Recipient withdraws using commitment 4 (during refund waiting period) ==="
 stellar keys use recipient
 stellar contract invoke \
     --id channel \
