@@ -1,33 +1,31 @@
 #![cfg(test)]
 
-use ed25519_dalek::{Signer, SigningKey};
+use ed25519_dalek::SigningKey;
 use soroban_sdk::{
-    symbol_short,
     testutils::{Address as _, Ledger},
     token::{StellarAssetClient, TokenClient},
-    xdr::ToXdr,
     Address, BytesN, Env,
 };
 
 use crate::{Commitment, Contract, ContractClient};
+
+impl Commitment {
+    fn sign(self, signing_key: &SigningKey) -> BytesN<64> {
+        use ed25519_dalek::Signer;
+        use soroban_sdk::xdr::ToXdr;
+        let env = self.channel.env().clone();
+        let payload = self.to_xdr(&env);
+        let buf = payload.to_buffer::<256>();
+        let sig = signing_key.sign(buf.as_slice());
+        BytesN::from_array(&env, &sig.to_bytes())
+    }
+}
 
 fn create_token<'a>(env: &Env) -> (Address, TokenClient<'a>, StellarAssetClient<'a>) {
     let admin = Address::generate(env);
     let contract_id = env.register_stellar_asset_contract_v2(admin.clone());
     let address = contract_id.address();
     (address.clone(), TokenClient::new(env, &address), StellarAssetClient::new(env, &address))
-}
-
-fn sign_commitment(env: &Env, signing_key: &SigningKey, channel: &Address, amount: i128) -> BytesN<64> {
-    let commitment = Commitment {
-        prefix: symbol_short!("chancmmt"),
-        channel: channel.clone(),
-        amount,
-    };
-    let payload = commitment.to_xdr(env);
-    let buf = payload.to_buffer::<256>();
-    let sig = signing_key.sign(buf.as_slice());
-    BytesN::from_array(env, &sig.to_bytes())
 }
 
 #[test]
@@ -47,7 +45,7 @@ fn test_withdraw() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig = sign_commitment(&env, &auth_key, &channel_id, 300);
+    let sig = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
     client.withdraw(&300, &sig);
 
     assert_eq!(token.balance(&to), 300);
@@ -71,13 +69,13 @@ fn test_withdraw_incremental() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    // Settle 200 first.
-    let sig1 = sign_commitment(&env, &auth_key, &channel_id, 200);
+    // Withdraw 200 first.
+    let sig1 = Commitment::new(channel_id.clone(), 200).sign(&auth_key);
     client.withdraw(&200, &sig1);
     assert_eq!(token.balance(&to), 200);
 
-    // Settle 300 total — only 100 more transferred.
-    let sig2 = sign_commitment(&env, &auth_key, &channel_id, 300);
+    // Withdraw 300 total — only 100 more transferred.
+    let sig2 = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
     client.withdraw(&300, &sig2);
     assert_eq!(token.balance(&to), 300);
     assert_eq!(token.balance(&channel_id), 200);
@@ -178,7 +176,7 @@ fn test_withdraw_during_close() {
     client.close();
 
     // Recipient withdraws during the waiting period.
-    let sig = sign_commitment(&env, &auth_key, &channel_id, 300);
+    let sig = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
     client.withdraw(&300, &sig);
     assert_eq!(token.balance(&to), 300);
 
@@ -211,7 +209,7 @@ fn test_invalid_signature() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig = sign_commitment(&env, &wrong_key, &channel_id, 200);
+    let sig = Commitment::new(channel_id.clone(), 200).sign(&wrong_key);
     let result = client.try_withdraw(&200, &sig);
     assert!(result.is_err());
 }

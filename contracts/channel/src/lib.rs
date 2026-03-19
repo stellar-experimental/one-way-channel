@@ -25,27 +25,29 @@ pub enum DataKey {
 
 #[contracttype]
 pub struct Commitment {
-    pub prefix: Symbol,
-    pub channel: Address,
-    pub amount: i128,
+    prefix: Symbol,
+    channel: Address,
+    amount: i128,
 }
 
 impl Commitment {
-    fn new(env: &Env, amount: i128) -> Self {
+    pub fn new(channel: Address, amount: i128) -> Self {
         Commitment {
             prefix: symbol_short!("chancmmt"),
-            channel: env.current_contract_address(),
+            channel,
             amount,
         }
     }
 
-    fn into_bytes(self, env: &Env) -> Bytes {
-        self.to_xdr(env)
+    fn into_bytes(self) -> Bytes {
+        let env = self.channel.env().clone();
+        self.to_xdr(&env)
     }
 
-    fn verify(self, env: &Env, sig: &BytesN<64>) {
+    fn verify(self, sig: &BytesN<64>) {
+        let env = self.channel.env().clone();
         let commitment_key: BytesN<32> = env.storage().instance().get(&DataKey::CommitmentKey).unwrap();
-        let payload = self.into_bytes(env);
+        let payload = self.into_bytes();
         env.crypto().ed25519_verify(&commitment_key, &payload, sig);
     }
 }
@@ -102,7 +104,7 @@ impl Contract {
     /// # Auth
     /// None.
     pub fn prepare_commitment(env: Env, amount: i128) -> Bytes {
-        Commitment::new(&env, amount).into_bytes(&env)
+        Commitment::new(env.current_contract_address(), amount).into_bytes()
     }
 
     /// Withdraw the committed amount to the recipient. The commitment amount is
@@ -116,7 +118,7 @@ impl Contract {
     pub fn withdraw(env: Env, amount: i128, sig: BytesN<64>) {
         let to: Address = env.storage().instance().get(&DataKey::To).unwrap();
         to.require_auth();
-        Commitment::new(&env, amount).verify(&env, &sig);
+        Commitment::new(env.current_contract_address(), amount).verify(&sig);
         let withdrawn: i128 = env.storage().instance().get(&DataKey::Withdrawn).unwrap_or(0);
         let payout = amount - withdrawn;
         if payout > 0 {
