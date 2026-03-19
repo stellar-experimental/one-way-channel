@@ -25,7 +25,7 @@ pub enum DataKey {
 
 #[contracttype]
 pub struct Commitment {
-    prefix: Symbol,
+    domain: Symbol,
     channel: Address,
     amount: i128,
 }
@@ -33,7 +33,7 @@ pub struct Commitment {
 impl Commitment {
     pub fn new(channel: Address, amount: i128) -> Self {
         Commitment {
-            prefix: symbol_short!("chancmmt"),
+            domain: symbol_short!("chancmmt"),
             channel,
             amount,
         }
