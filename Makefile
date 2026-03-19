@@ -15,6 +15,12 @@ fmt:
 fmt-check:
 	cargo fmt --all --check
 
+doc:
+	cargo doc --open
+
+doc-check:
+	cargo doc
+
 readme:
 	cd contracts/channel \
 		&& cargo +nightly rustdoc -- -Zunstable-options -wjson
