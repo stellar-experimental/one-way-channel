@@ -62,7 +62,7 @@ fn test_full_flow() {
     client.close_finish();
     assert_eq!(token.balance(&channel_id), 500);
 
-    client.withdraw(&400);
+    client.withdraw();
     assert_eq!(token.balance(&to), 400);
     assert_eq!(token.balance(&channel_id), 100);
 
@@ -99,7 +99,7 @@ fn test_close_dispute_overwrites() {
     });
 
     client.close_finish();
-    client.withdraw(&300);
+    client.withdraw();
     client.refund();
     assert_eq!(token.balance(&to), 300);
     assert_eq!(token.balance(&funder), 700);
@@ -176,7 +176,7 @@ fn test_close_immediately() {
 
     assert_eq!(token.balance(&channel_id), 500);
 
-    client.withdraw(&300);
+    client.withdraw();
     client.refund();
     assert_eq!(token.balance(&to), 300);
     assert_eq!(token.balance(&funder), 700);
@@ -200,6 +200,6 @@ fn test_withdraw_before_close_fails() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let result = client.try_withdraw(&300);
+    let result = client.try_withdraw();
     assert!(result.is_err());
 }

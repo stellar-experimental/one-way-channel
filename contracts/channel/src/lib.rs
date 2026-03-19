@@ -18,7 +18,7 @@ pub enum DataKey {
     To,
     CloseLedgerCount,
     Close,
-    Closed(i128),
+    Closed,
 }
 
 #[contractevent]
@@ -180,7 +180,7 @@ impl Contract {
         }
 
         env.storage().instance().remove(&DataKey::Close);
-        env.storage().instance().set(&DataKey::Closed(close.amount), &());
+        env.storage().instance().set(&DataKey::Closed, &close.amount);
         env.events().publish_event(&ClosedEvent { amount: close.amount });
         Ok(())
     }
@@ -196,7 +196,7 @@ impl Contract {
         to.require_auth();
         Voucher::new(&env, amount).verify(&env, &sig);
         env.storage().instance().remove(&DataKey::Close);
-        env.storage().instance().set(&DataKey::Closed(amount), &());
+        env.storage().instance().set(&DataKey::Closed, &amount);
         env.events().publish_event(&ClosedEvent { amount });
     }
 
@@ -205,12 +205,10 @@ impl Contract {
     ///
     /// # Auth
     /// None.
-    pub fn withdraw(env: Env, amount: i128) -> Result<(), Error> {
-        if !env.storage().instance().has(&DataKey::Closed(amount)) {
-            return Err(Error::NotClosed);
-        }
+    pub fn withdraw(env: Env) -> Result<(), Error> {
+        let amount: i128 = env.storage().instance().get(&DataKey::Closed).ok_or(Error::NotClosed)?;
         let to: Address = env.storage().instance().get(&DataKey::To).unwrap();
-        env.storage().instance().remove(&DataKey::Closed(amount));
+        env.storage().instance().remove(&DataKey::Closed);
         Self::token_client(&env).transfer(&env.current_contract_address(), &to, &amount);
         env.events().publish_event(&WithdrawEvent { to, amount });
         Ok(())
