@@ -160,14 +160,17 @@ pub enum DataKey {
 #[contracttype]
 pub struct Commitment {
     domain: Symbol,
+    network: BytesN<32>,
     channel: Address,
     amount: i128,
 }
 
 impl Commitment {
     pub fn new(channel: Address, amount: i128) -> Self {
+        let network = channel.env().ledger().network_id();
         Commitment {
             domain: symbol_short!("chancmmt"),
+            network,
             channel,
             amount,
         }
@@ -203,7 +206,13 @@ impl Contract {
     /// - `amount`: The initial deposit amount.
     /// - `close_waiting_period`: The number of ledgers the recipient has to
     ///   withdraw after [`Self::close`] is called, before [`Self::refund`]
-    ///   becomes available.
+    ///   becomes available. This value should be large enough to give the
+    ///   recipient time to observe a close event and submit a withdrawal,
+    ///   otherwise the recipient may not accept the channel. However, it
+    ///   should not be so large that the funder cannot reclaim funds in a
+    ///   timely manner. Setting zero or a very low number results in
+    ///   near-immediate refunds, which is almost certainly not useful for
+    ///   either participant.
     ///
     /// Callable by the deployer.
     ///
@@ -411,7 +420,7 @@ impl Contract {
 
         // Set the close effective ledger.
         let close_waiting_period = Self::close_waiting_period(env);
-        let effective_at_ledger = env.ledger().sequence() + close_waiting_period;
+        let effective_at_ledger = env.ledger().sequence().saturating_add(close_waiting_period);
         env.storage().instance().set(&DataKey::Closed, &effective_at_ledger);
 
         env.events().publish_event(&event::Close { effective_at_ledger });
@@ -419,8 +428,12 @@ impl Contract {
 
     /// Refund the remaining balance to the funder after the close is effective.
     ///
-    /// Callable by the funder (from), after the close is effective_at_ledger
-    /// has been reached.
+    /// Can be called multiple times. This is useful if the funder accidentally
+    /// deposits additional funds after closing — they can call refund again to
+    /// reclaim the additional balance.
+    ///
+    /// Callable by the funder (from), after the close effective_at_ledger has
+    /// been reached.
     ///
     /// # Auth
     /// - `from`: required.
