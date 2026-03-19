@@ -26,21 +26,13 @@ and the funder can close the channel to reclaim the remainder.
 ```mermaid
 stateDiagram-v2
     [*] --> Open: __constructor
-
-    Open --> Open: top_up / withdraw
     Open --> Closing: close
-
     Closing --> Closed: [after wait]
-
     Closed --> [*]: refund
-
-    note right of Closing
-        withdraw
-    end note
-    note right of Closed
-        withdraw
-    end note
 ```
+
+`top_up` and `withdraw` can be called in any state. After `refund` the
+channel balance is zero so there is nothing left to withdraw.
 
 ## Functions
 
