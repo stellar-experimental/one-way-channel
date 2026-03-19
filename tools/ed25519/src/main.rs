@@ -68,21 +68,25 @@ fn main() {
 #[derive(Clone)]
 struct HexBytes(Vec<u8>);
 
+fn strip_quotes(s: &str) -> &str {
+    s.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(s)
+}
+
 fn parse_hex(s: &str) -> Result<HexBytes, String> {
-    hex::decode(s).map(HexBytes).map_err(|e| e.to_string())
+    hex::decode(strip_quotes(s)).map(HexBytes).map_err(|e| e.to_string())
 }
 
 fn parse_signing_key(s: &str) -> Result<SigningKey, String> {
-    let bytes: [u8; 32] = hex::decode(s).map_err(|e| e.to_string())?.try_into().map_err(|_| "must be 32 bytes".to_string())?;
+    let bytes: [u8; 32] = hex::decode(strip_quotes(s)).map_err(|e| e.to_string())?.try_into().map_err(|_| "must be 32 bytes".to_string())?;
     Ok(SigningKey::from_bytes(&bytes))
 }
 
 fn parse_verifying_key(s: &str) -> Result<VerifyingKey, String> {
-    let bytes: [u8; 32] = hex::decode(s).map_err(|e| e.to_string())?.try_into().map_err(|_| "must be 32 bytes".to_string())?;
+    let bytes: [u8; 32] = hex::decode(strip_quotes(s)).map_err(|e| e.to_string())?.try_into().map_err(|_| "must be 32 bytes".to_string())?;
     VerifyingKey::from_bytes(&bytes).map_err(|e| e.to_string())
 }
 
 fn parse_sig(s: &str) -> Result<Signature, String> {
-    let bytes: [u8; 64] = hex::decode(s).map_err(|e| e.to_string())?.try_into().map_err(|_| "must be 64 bytes".to_string())?;
+    let bytes: [u8; 64] = hex::decode(strip_quotes(s)).map_err(|e| e.to_string())?.try_into().map_err(|_| "must be 64 bytes".to_string())?;
     Ok(Signature::from_bytes(&bytes))
 }

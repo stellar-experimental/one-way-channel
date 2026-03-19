@@ -51,7 +51,7 @@ stellar contract deploy \
     --commitment_key $COMMITMENT_PKEY \
     --to recipient \
     --amount 10000000 \
-    --refund_waiting_period 10
+    --refund_waiting_period 5
 echo "Channel: $(stellar contract alias show channel)"
 
 echo ""
@@ -64,35 +64,33 @@ echo -n "Withdrawn: "
 stellar contract invoke --id channel --send=no -- withdrawn
 
 echo ""
-echo "=== Off-chain: Funder signs commitments ==="
-# Payment 1: authorize recipient to withdraw up to 3,000,000 stroops.
-COMMITMENT_1=$(stellar contract invoke \
-    --id channel --send=no \
-    -- prepare_commitment --amount 3000000)
-# Remove quotes from the output.
-COMMITMENT_1=$(echo $COMMITMENT_1 | tr -d '"')
-echo "Commitment 1 (3000000): $COMMITMENT_1"
-SIG_1=$(ed25519 sign $COMMITMENT_SKEY $COMMITMENT_1)
-echo "Signature 1: $SIG_1"
+echo "=== Off-chain: Funder signs 4 commitments ==="
 
-# Payment 2: authorize recipient to withdraw up to 7,000,000 stroops.
-COMMITMENT_2=$(stellar contract invoke \
-    --id channel --send=no \
-    -- prepare_commitment --amount 7000000)
-COMMITMENT_2=$(echo $COMMITMENT_2 | tr -d '"')
-echo "Commitment 2 (7000000): $COMMITMENT_2"
+COMMITMENT_1=$(stellar contract invoke --id channel --send=no -- prepare_commitment --amount 1000000)
+SIG_1=$(ed25519 sign $COMMITMENT_SKEY $COMMITMENT_1)
+echo "  Payment 1: cumulative 1,000,000 stroops, sig=$SIG_1"
+
+COMMITMENT_2=$(stellar contract invoke --id channel --send=no -- prepare_commitment --amount 3000000)
 SIG_2=$(ed25519 sign $COMMITMENT_SKEY $COMMITMENT_2)
-echo "Signature 2: $SIG_2"
+echo "  Payment 2: cumulative 3,000,000 stroops, sig=$SIG_2"
+
+COMMITMENT_3=$(stellar contract invoke --id channel --send=no -- prepare_commitment --amount 6000000)
+SIG_3=$(ed25519 sign $COMMITMENT_SKEY $COMMITMENT_3)
+echo "  Payment 3: cumulative 6,000,000 stroops, sig=$SIG_3"
+
+COMMITMENT_4=$(stellar contract invoke --id channel --send=no -- prepare_commitment --amount 8000000)
+SIG_4=$(ed25519 sign $COMMITMENT_SKEY $COMMITMENT_4)
+echo "  Payment 4: cumulative 8,000,000 stroops, sig=$SIG_4"
 
 echo ""
-echo "=== Recipient withdraws using commitment 2 (latest) ==="
+echo "=== Recipient withdraws using commitment 3 (skipping 1 and 2) ==="
 stellar keys use recipient
 stellar contract invoke \
     --id channel \
-    -- withdraw --amount 7000000 --sig $SIG_2
+    -- withdraw --amount 6000000 --sig $SIG_3
 
 echo ""
-echo "=== Channel state after withdraw ==="
+echo "=== Channel state after first withdraw ==="
 echo -n "Balance:   "
 stellar contract invoke --id channel --send=no -- balance
 echo -n "Deposited: "
@@ -108,7 +106,24 @@ stellar contract invoke \
     -- close
 
 echo ""
+echo "=== Recipient withdraws using commitment 4 (during close waiting period) ==="
+stellar keys use recipient
+stellar contract invoke \
+    --id channel \
+    -- withdraw --amount 8000000 --sig $SIG_4
+
+echo ""
+echo "=== Channel state after second withdraw ==="
+echo -n "Balance:   "
+stellar contract invoke --id channel --send=no -- balance
+echo -n "Deposited: "
+stellar contract invoke --id channel --send=no -- deposited
+echo -n "Withdrawn: "
+stellar contract invoke --id channel --send=no -- withdrawn
+
+echo ""
 echo "=== Funder refunds remainder (retrying until close is effective) ==="
+stellar keys use funder
 until stellar contract invoke --id channel -- refund 2>/dev/null; do
     echo "  Close not yet effective, retrying in 5s..."
     sleep 5
