@@ -33,10 +33,17 @@ stellar contract alias add native --id $(stellar contract id asset --asset nativ
 echo "Token: $(stellar contract id asset --asset native)"
 
 echo ""
+echo "=== Installing channel wasm ==="
+WASM_HASH=$(stellar contract install \
+    --wasm $WASM \
+    --source funder)
+echo "Wasm hash: $WASM_HASH"
+
+echo ""
 echo "=== Deploying channel contract ==="
 stellar contract deploy \
     --alias channel \
-    --wasm $WASM \
+    --wasm-hash $WASM_HASH \
     --source funder \
     -- \
     --token native \
