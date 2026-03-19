@@ -20,7 +20,7 @@ fn create_token<'a>(env: &Env) -> (Address, TokenClient<'a>, StellarAssetClient<
 
 fn sign_commitment(env: &Env, signing_key: &SigningKey, channel: &Address, amount: i128) -> BytesN<64> {
     let commitment = Commitment {
-        prefix: symbol_short!("chancmmt")e
+        prefix: symbol_short!("chancmmt"),
         channel: channel.clone(),
         amount,
     };

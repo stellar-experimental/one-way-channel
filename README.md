@@ -43,7 +43,7 @@ stateDiagram-v2
 | `__constructor` | Deploy the contract with the token, funder, recipient, commitment key, initial deposit, and close ledger count. | Deployer | `from` |
 | `top_up` | Top up the channel with the stored token from the stored from address. | Anyone | `from` |
 | `prepare_commitment` | Returns the commitment payload that needs to be signed by the commitment_key. | Anyone | None |
-| `balance_deposited` | Returns the total amount deposited in the channel. | Anyone | None |
+| `balance` | Returns the balance of the channel. This is the deposited amount minus any amount already settled. | Anyone | None |
 | `settle` | Settle the committed amount to the recipient. The commitment amount is the total amount, only the difference from previous settlements is transferred. Can be called at any time. | Recipient | `to` + commitment sig |
 | `close` | Close the channel, effective after a waiting period. The recipient can still settle during the wait. | Funder | `from` |
 | `refund` | Refund the remaining balance to the funder after the close is effective. | Funder | `from` |

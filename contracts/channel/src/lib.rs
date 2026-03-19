@@ -85,12 +85,13 @@ impl Contract {
         }
     }
 
-    /// Returns the total amount deposited in the channel.
+    /// Returns the balance of the channel. This is the deposited amount minus
+    /// any amount already settled.
     /// Called by anyone.
     ///
     /// # Auth
     /// None.
-    pub fn balance_deposited(env: Env) -> i128 {
+    pub fn balance(env: Env) -> i128 {
         Self::token_client(&env).balance(&env.current_contract_address())
     }
 
