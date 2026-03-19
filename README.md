@@ -122,9 +122,10 @@ ScVal::Map({
 
 ### 3. Close
 
-The recipient calls [`Contract::close`] at any time with a commitment
-amount and its signature. The contract verifies the signature, then
-transfers the commitment amount to the recipient.
+The recipient calls [`Contract::close`] with a commitment amount and its
+signature before the close effective ledger is reached. The contract
+verifies the signature, then transfers the commitment amount to the
+recipient.
 
 After transferring the committed funds, the close function automatically
 attempts to refund the remaining balance to the funder. This refund attempt

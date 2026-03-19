@@ -24,7 +24,7 @@
 //!
 //! ### Funder
 //!
-//! - Keeping the commitment key secret.
+//! - Keeping the private key corresponding to `commitment_key` (the commitment signing key) secret.
 //!
 //! ### Recipient
 //!
@@ -122,9 +122,10 @@
 //!
 //! ### 3. Close
 //!
-//! The recipient calls [`Contract::close`] at any time with a commitment
-//! amount and its signature. The contract verifies the signature, then
-//! transfers the commitment amount to the recipient.
+//! The recipient calls [`Contract::close`] with a commitment amount and its
+//! signature before the close effective ledger is reached. The contract
+//! verifies the signature, then transfers the commitment amount to the
+//! recipient.
 //!
 //! After transferring the committed funds, the close function automatically
 //! attempts to refund the remaining balance to the funder. This refund attempt
@@ -355,7 +356,7 @@ impl Contract {
     /// The returned bytes must be signed by the ed25519 key corresponding to
     /// the `commitment_key` stored in the channel. The resulting signature,
     /// along with the amount, can be passed to `close` by the
-    /// recipient to close the channel at any time.
+    /// recipient to close the channel.
     ///
     /// Commitments are typically prepared off-chain. This function is provided
     /// as a convenience.
