@@ -2,12 +2,20 @@
 
 use ed25519_dalek::SigningKey;
 use soroban_sdk::{
-    testutils::{Address as _, Ledger},
+    testutils::{Address as _, Events as _, Ledger},
     token::{StellarAssetClient, TokenClient},
-    Address, BytesN, Env,
+    xdr, Address, BytesN, Env,
 };
 
 use crate::{Commitment, Contract, ContractClient};
+
+fn has_event_type(env: &Env, contract: &Address, event_name: &str) -> bool {
+    let events = env.events().all().filter_by_contract(contract);
+    let target = xdr::ScVal::Symbol(xdr::ScSymbol(event_name.try_into().unwrap()));
+    events.events().iter().any(|e| match &e.body {
+        xdr::ContractEventBody::V0(body) => body.topics.first() == Some(&target),
+    })
+}
 
 impl Commitment {
     fn sign(self, signing_key: &SigningKey) -> BytesN<64> {
@@ -273,8 +281,40 @@ fn test_close_zero_amount() {
     // Close with amount 0 — no transfer to recipient, but refund to funder.
     let sig = Commitment::new(channel_id.clone(), 0).sign(&auth_key);
     client.close(&0, &sig);
+    // Check events immediately after close, before any other contract calls,
+    // since env.events().all() only returns events from the last invocation.
+    assert!(!has_event_type(&env, &channel_id, "withdraw"));
     assert_eq!(token.balance(&to), 0);
     assert_eq!(token.balance(&funder), 1000);
+    assert_eq!(token.balance(&channel_id), 0);
+}
+
+/// Closing for the full balance transfers everything to the recipient and
+/// does not emit a spurious Refund event for the zero remaining balance.
+#[test]
+fn test_close_full_balance_no_refund_event() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[23u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    // Close for the full balance.
+    let sig = Commitment::new(channel_id.clone(), 500).sign(&auth_key);
+    client.close(&500, &sig);
+    // Check events immediately after close, before any other contract calls.
+    assert!(!has_event_type(&env, &channel_id, "refund"));
+    assert_eq!(token.balance(&to), 500);
+    assert_eq!(token.balance(&funder), 500);
     assert_eq!(token.balance(&channel_id), 0);
 }
 
@@ -358,8 +398,11 @@ fn test_refund_twice() {
     assert_eq!(token.balance(&funder), 1000);
     assert_eq!(token.balance(&channel_id), 0);
 
-    // Second refund succeeds but transfers nothing.
+    // Second refund succeeds but transfers nothing, and no Refund event is
+    // emitted since balance is zero.
     client.refund();
+    // Check events immediately after refund, before any other contract calls.
+    assert!(!has_event_type(&env, &channel_id, "refund"));
     assert_eq!(token.balance(&funder), 1000);
     assert_eq!(token.balance(&channel_id), 0);
 }
@@ -384,10 +427,12 @@ fn test_top_up_zero() {
 
     // Top up with 0 — no transfer should occur, no auth required.
     client.top_up(&0);
-    assert_eq!(client.balance(), 500);
     // Verify no auth was required by checking auths is empty for top_up(0).
+    // Must check before any other contract call since env.auths() returns
+    // auths from the last invocation only.
     let auths = env.auths();
     assert!(auths.is_empty());
+    assert_eq!(client.balance(), 500);
 }
 
 /// Refund succeeds when called at exactly the effective_at_ledger (boundary
