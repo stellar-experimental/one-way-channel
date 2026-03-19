@@ -8,17 +8,18 @@ pub struct Open {
     pub from: Address,
     /// The ed25519 public key used to verify commitment signatures.
     pub commitment_key: BytesN<32>,
-    /// The recipient who can withdraw funds using a commitment.
+    /// The recipient who can close the channel using a commitment.
     pub to: Address,
     /// The SEP-41 token used for payments.
     pub token: Address,
     /// The initial deposit amount.
     pub amount: i128,
-    /// The number of ledgers the funder has to wait before refund after close.
+    /// The number of ledgers the funder has to wait before refund after close_start.
     pub refund_waiting_period: u32,
 }
 
-/// Emitted when the channel is closed via close.
+/// Emitted when the channel close becomes effective, either immediately via
+/// close or after a waiting period via close_start.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Close {
@@ -27,14 +28,13 @@ pub struct Close {
     pub effective_at_ledger: u32,
 }
 
-/// Emitted when the recipient withdraws via withdraw.
+/// Emitted when the recipient receives funds via close.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Withdraw {
     /// The recipient who received the funds.
     pub to: Address,
-    /// The amount transferred in this withdrawal. This is not the cumulative
-    /// total — it is the incremental amount transferred in this call.
+    /// The amount transferred to the recipient.
     pub amount: i128,
 }
 

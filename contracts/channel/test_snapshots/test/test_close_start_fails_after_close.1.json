@@ -62,7 +62,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "bytes": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+                  "bytes": "20828bf5c5bdcacb684863336c202fb5599da48be5596615742170705beca9f7"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
@@ -108,36 +108,13 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "withdraw",
-              "args": [
-                {
-                  "i128": "200"
-                },
-                {
-                  "bytes": "0a5163049029b2043145835c5d20637d8438cef115a0d34bbccc7eab4ca71a436516f0e201553c1081480ea34e6421f66323432b4ead455d809f4b0090c81d0f"
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
-    [],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "withdraw",
+              "function_name": "close",
               "args": [
                 {
                   "i128": "300"
                 },
                 {
-                  "bytes": "1474942905973626928b0af6e4fb97deee73090ca7b2211b31eae63a0a6592eff843fcefffafd0c73539137d310273453e9286d517d253893f9c607e9fbff508"
+                  "bytes": "8c44662d11e26d32688a8ebd1c2c76b0cfef4048503f3f75a6d885d8c822d572813ab6c834fb54a1ada4f118453f1063e23e9288242a7607cfd0889c765b5f04"
                 }
               ]
             }
@@ -146,7 +123,6 @@
         }
       ]
     ],
-    [],
     []
   ],
   "ledger": {
@@ -190,26 +166,6 @@
               "key": {
                 "ledger_key_nonce": {
                   "nonce": "801925984706572462"
-                }
-              },
-              "durability": "temporary",
-              "val": "void"
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 6311999
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "key": {
-                "ledger_key_nonce": {
-                  "nonce": "2032731177588607455"
                 }
               },
               "durability": "temporary",
@@ -299,12 +255,24 @@
                       "key": {
                         "vec": [
                           {
+                            "symbol": "CloseEffectiveAtLedger"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u32": 0
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
                             "symbol": "CommitmentKey"
                           }
                         ]
                       },
                       "val": {
-                        "bytes": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394"
+                        "bytes": "20828bf5c5bdcacb684863336c202fb5599da48be5596615742170705beca9f7"
                       }
                     },
                     {
@@ -353,18 +321,6 @@
                       },
                       "val": {
                         "address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN"
-                      }
-                    },
-                    {
-                      "key": {
-                        "vec": [
-                          {
-                            "symbol": "WithdrawnAmount"
-                          }
-                        ]
-                      },
-                      "val": {
-                        "i128": "300"
                       }
                     }
                   ]
@@ -453,7 +409,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "500"
+                      "i128": "700"
                     }
                   },
                   {
@@ -505,7 +461,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "200"
+                      "i128": "0"
                     }
                   },
                   {

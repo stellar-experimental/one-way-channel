@@ -12,10 +12,10 @@
 //! ## Participants
 //!
 //! - **Funder (`from`)**: Deposits tokens into the channel and signs
-//!   commitments authorizing the recipient to withdraw up to a given cumulative
-//!   amount.
-//! - **Recipient (`to`)**: Receives commitments off-chain and can withdraw
-//!   funds on-chain at any time using a signed commitment.
+//!   commitments authorizing the recipient to close the channel and receive a
+//!   given amount.
+//! - **Recipient (`to`)**: Receives commitments off-chain and can close the
+//!   channel on-chain at any time using a signed commitment.
 //!
 //! ## Expectations
 //!
@@ -29,25 +29,27 @@
 //! ### Recipient
 //!
 //! - Verifies the `refund_waiting_period` at channel creation is long
-//!   enough to allow them to react to a close event.
+//!   enough to allow them to react to a close_start event.
 //! - Verifies the `amount` in each commitment is less than the channels
 //!   deposited amount.
 //! - Monitors the channel for [`event::Close`] events.
-//! - Calls `withdraw` with the highest-value commitment promptly after seeing a
-//!   close event, before the refund waiting period elapses.
+//! - Calls `close` with the highest-value commitment promptly after seeing a
+//!   close_start event, before the refund waiting period elapses.
 //!
 //! ## State diagram
 //!
 //! ```mermaid
 //! stateDiagram-v2
 //!     [*] --> Open: __constructor
-//!     Open --> Closing: close
+//!     Open --> [*]: close
+//!     Open --> Closing: close_start
+//!     Closing --> [*]: close
 //!     Closing --> Closed: [after wait]
 //!     Closed --> [*]: refund
 //! ```
 //!
-//! `top_up` and `withdraw` can be called in any state. After `refund` the
-//! channel balance is zero so there is nothing left to withdraw.
+//! `top_up` and `close` can be called in any state. After `refund` the
+//! channel balance is zero so there is nothing left to close.
 //!
 //! ## Functions
 //!
@@ -57,8 +59,8 @@
 //! |---|---|
 //! | `__constructor` | Open a channel with an initial deposit. Callable by the funder, or anyone if amount is zero. |
 //! | `top_up` | Deposit additional tokens into the channel. |
-//! | `withdraw` | Withdraw funds using a signed commitment. |
-//! | `close` | Begin closing the channel, effective after a waiting period. |
+//! | `close` | Close the channel using a signed commitment, withdrawing funds to the recipient. Automatically attempts to refund the funder. |
+//! | `close_start` | Begin closing the channel, effective after a waiting period. |
 //! | `refund` | Refund the remaining balance to the funder after the close is effective. |
 //!
 //! ### Helpers
@@ -75,9 +77,7 @@
 //! | `from` | Returns the funder address. |
 //! | `to` | Returns the recipient address. |
 //! | `refund_waiting_period` | Returns the refund waiting period in ledgers. |
-//! | `deposited` | Returns the total amount deposited. |
-//! | `withdrawn` | Returns the total amount already withdrawn. |
-//! | `balance` | Returns the current balance (deposited minus withdrawn). |
+//! | `balance` | Returns the current balance. |
 //!
 //! ## Lifecycle
 //!
@@ -94,15 +94,12 @@
 //! ### 2. Off-chain payments
 //!
 //! The funder makes payments by signing commitments off-chain and sending them
-//! to the recipient. A commitment authorizes the recipient to withdraw up to a
-//! **cumulative total** amount. Each new commitment replaces the previous one.
+//! to the recipient. A commitment authorizes the recipient to close the
+//! channel and receive the specified amount.
 //!
 //! For example:
-//! - Commitment for 100: recipient can withdraw up to 100.
-//! - Commitment for 140: recipient can withdraw up to 140 (40 more if 100 was
-//!   already withdrawn).
-//! - Commitment for 300: recipient can withdraw up to 300 (160 more if 140 was
-//!   already withdrawn).
+//! - Commitment for 100: recipient can close the channel and receive 100.
+//! - Commitment for 140: recipient can close the channel and receive 140.
 //!
 //! A commitment is an XDR serialized [`Commitment`] struct containing a domain
 //! separator (`chancmmt`), the network ID, the channel contract address, and
@@ -123,41 +120,43 @@
 //! })
 //! ```
 //!
-//! ### 3. Withdraw
+//! ### 3. Close
 //!
-//! The recipient calls [`Contract::withdraw`] at any time with a commitment
+//! The recipient calls [`Contract::close`] at any time with a commitment
 //! amount and its signature. The contract verifies the signature, then
-//! transfers the difference between the commitment amount and what has already
-//! been withdrawn. If the commitment amount is less than or equal to what has
-//! already been withdrawn, no transfer occurs.
+//! transfers the commitment amount to the recipient.
 //!
-//! The recipient does not need to withdraw after every commitment. They can
-//! accumulate multiple commitments and withdraw using only the latest (highest
-//! amount) commitment.
+//! After transferring the committed funds, the close function automatically
+//! attempts to refund the remaining balance to the funder. This refund attempt
+//! uses `try_transfer` and will silently succeed or fail without affecting the
+//! withdrawal. If the automatic refund fails, the funder can call
+//! [`Contract::refund`] to reclaim the remaining balance.
 //!
-//! ### 4. Close
+//! Cannot be called after the close effective ledger has been reached
+//! (i.e. after a `close_start` waiting period has elapsed).
 //!
-//! The funder calls [`Contract::close`] to begin closing the channel. The close
-//! does not take effect immediately — there is a waiting period of
+//! ### 4. Close Start
+//!
+//! The funder calls [`Contract::close_start`] to begin closing the channel.
+//! The close does not take effect immediately — there is a waiting period of
 //! `refund_waiting_period` ledgers.
 //!
-//! The recipient can still call [`Contract::withdraw`] at any time, including
-//! after the waiting period has elapsed, up until the funder calls
-//! [`Contract::refund`]. However, once the waiting period has elapsed the
-//! funder can call refund at any time, so the recipient should withdraw
-//! promptly.
+//! The recipient can still call [`Contract::close`] during the waiting
+//! period. Once the waiting period has elapsed, the recipient can no longer
+//! call `close`, and the funder can call `refund` to reclaim the remaining
+//! balance.
 //!
 //! **Important:** The recipient should monitor for [`event::Close`] events and
-//! withdraw before the close becomes effective.
+//! close before the close_start becomes effective.
 //!
 //! ### 5. Refund
 //!
 //! After the refund waiting period has elapsed, the funder calls
 //! [`Contract::refund`] to reclaim whatever balance remains in the channel.
 //! This transfers the **entire** remaining token balance to the funder,
-//! including any amount the recipient was entitled to but did not withdraw.
+//! including any amount the recipient was entitled to but did not close for.
 //! The contract does not reserve funds for the recipient. If the recipient
-//! has not withdrawn before the funder calls refund, those funds are lost to
+//! has not closed before the funder calls refund, those funds are lost to
 //! the recipient and assumed to be of no interest to the recipient.
 //!
 //! ## Security
@@ -168,7 +167,7 @@
 //!   channel contract address, preventing signatures from being reused across
 //!   networks, channels, or confused with other signed payloads.
 //! - The refund waiting period protects the recipient: it gives them time to
-//!   withdraw using their latest commitment before the funder can reclaim
+//!   close using their latest commitment before the funder can reclaim
 //!   funds.
 
 #![no_std]
@@ -184,6 +183,7 @@ pub enum Error {
     NegativeAmount = 1,
     NotClosed = 2,
     RefundWaitingPeriodNotElapsed = 3,
+    AlreadyClosed = 4,
 }
 
 #[contracttype]
@@ -193,7 +193,6 @@ pub enum DataKey {
     CommitmentKey,
     To,
     RefundWaitingPeriod,
-    WithdrawnAmount,
     CloseEffectiveAtLedger,
 }
 
@@ -241,13 +240,13 @@ impl Contract {
     /// - `commitment_key`: The ed25519 public key used to verify commitment
     ///   signatures. See `prepare_commitment` for details on
     ///   commitments.
-    /// - `to`: The recipient who can `withdraw` funds using signed
+    /// - `to`: The recipient who can close the channel using signed
     ///   commitments.
     /// - `amount`: The initial deposit amount.
     /// - `refund_waiting_period`: The number of ledgers the recipient has to
-    ///   withdraw after `close` is called, before `refund`
+    ///   close after `close_start` is called, before `refund`
     ///   becomes available. This value should be large enough to give the
-    ///   recipient time to observe a close event and submit a withdrawal,
+    ///   recipient time to observe a close event and submit a close,
     ///   otherwise the recipient may not accept the channel. However, it
     ///   should not be so large that the funder cannot reclaim funds in a
     ///   timely manner. Setting zero or a very low number results in
@@ -341,29 +340,7 @@ impl Contract {
         env.storage().instance().get(&DataKey::RefundWaitingPeriod).unwrap()
     }
 
-    /// Returns the total amount deposited into the channel.
-    ///
-    /// Callable by anyone.
-    ///
-    /// # Auth
-    /// None.
-    pub fn deposited(env: &Env) -> i128 {
-        Self::balance(env) + Self::withdrawn(env)
-    }
-
-    /// Returns the total amount already withdrawn by the recipient.
-    ///
-    /// Callable by anyone.
-    ///
-    /// # Auth
-    /// None.
-    pub fn withdrawn(env: &Env) -> i128 {
-        env.storage().instance().get(&DataKey::WithdrawnAmount).unwrap_or(0)
-    }
-
     /// Returns the balance of the channel.
-    ///
-    /// This is the deposited amount minus any amount already withdrawn.
     ///
     /// Callable by anyone.
     ///
@@ -375,20 +352,10 @@ impl Contract {
 
     /// Returns the XDR serialized bytes of a commitment for the given amount.
     ///
-    /// The amount is the total cumulative amount the recipient is entitled to
-    /// withdraw, not an incremental amount. Each new commitment replaces the
-    /// previous one. For example: if the funder gives the recipient a signed
-    /// commitment for 100, the recipient can withdraw up to 100. If the
-    /// recipient withdraws using the committment they will receive 100
-    /// immediately. If the funder wishes to send a payment of 40 to the
-    /// receipient, the funder gives the recipient a signed committment for 140.
-    /// If the recipient withdraws using the committment of 140, they receive 40
-    /// immediately.
-    ///
     /// The returned bytes must be signed by the ed25519 key corresponding to
     /// the `commitment_key` stored in the channel. The resulting signature,
-    /// along with the amount, can be passed to `withdraw` by the
-    /// recipient to withdraw funds at any time.
+    /// along with the amount, can be passed to `close` by the
+    /// recipient to close the channel at any time.
     ///
     /// Commitments are typically prepared off-chain. This function is provided
     /// as a convenience.
@@ -402,16 +369,18 @@ impl Contract {
         Commitment::new(env.current_contract_address(), amount).into_bytes()
     }
 
-    /// Withdraw funds to the recipient using a signed commitment. The amount is
-    /// the total amount the recipient is entitled to. Only the difference
-    /// between the amount and what has already been withdrawn is transferred.
+    /// Close the channel using a signed commitment, withdrawing funds to the
+    /// recipient. The committed amount is transferred to the recipient.
     /// Can be called at any time.
     ///
-    /// The withdrawal amount is not configurable. Each call withdraws exactly
-    /// the amount needed to bring the total withdrawn up to the amount
-    /// authorized by the signed commitment. If an older commitment with a
-    /// lower amount is used after a higher amount has already been withdrawn,
-    /// no funds are transferred.
+    /// After transferring, this function automatically attempts to refund the
+    /// remaining balance to the funder using `try_transfer`. This refund
+    /// attempt will silently succeed or fail without affecting the withdrawal.
+    /// If the automatic refund fails, the funder can call [`Contract::refund`]
+    /// to reclaim the remaining balance.
+    ///
+    /// Cannot be called after the close effective ledger has been reached
+    /// (i.e. after a `close_start` waiting period has elapsed).
     ///
     /// **Important:** The recipient should call this whenever they see a
     /// [`event::Close`], before the close becomes effective. After the close is
@@ -422,38 +391,66 @@ impl Contract {
     /// # Auth
     /// - `to`: required.
     /// - Commitment signature serves as commitment_key authorization.
-    pub fn withdraw(env: &Env, amount: i128, sig: BytesN<64>) {
+    pub fn close(env: &Env, amount: i128, sig: BytesN<64>) -> Result<(), Error> {
         assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
+
+        // Reject if the close effective ledger has already been reached.
+        if let Some(effective_at_ledger) = Self::close_effective_at_ledger(env) {
+            if env.ledger().sequence() >= effective_at_ledger {
+                return Err(Error::AlreadyClosed);
+            }
+        }
 
         // Verify the recipient and commitment signature.
         let to = Self::to(env);
         to.require_auth();
         Commitment::new(env.current_contract_address(), amount).verify(&sig);
 
-        // Transfer only the difference from what has already been withdrawn.
-        let payout = amount - Self::withdrawn(env);
-        if payout > 0 {
-            env.storage().instance().set(&DataKey::WithdrawnAmount, &amount);
-            Self::token_client(env).transfer(&env.current_contract_address(), &to, &payout);
-            env.events().publish_event(&event::Withdraw { to, amount: payout });
+        // Transfer the committed amount to the recipient.
+        if amount > 0 {
+            Self::token_client(env).transfer(&env.current_contract_address(), &to, &amount);
+            env.events().publish_event(&event::Withdraw { to, amount });
         }
+
+        // Mark the channel as closed immediately.
+        let effective_at_ledger = env.ledger().sequence();
+        env.storage().instance().set(&DataKey::CloseEffectiveAtLedger, &effective_at_ledger);
+        env.events().publish_event(&event::Close { effective_at_ledger });
+
+        // Attempt to refund the remaining balance to the funder.
+        let from = Self::from(env);
+        let tc = Self::token_client(env);
+        let balance = tc.balance(&env.current_contract_address());
+        if balance > 0 {
+            if tc.try_transfer(&env.current_contract_address(), &from, &balance).is_ok() {
+                env.events().publish_event(&event::Refund { from, amount: balance });
+            }
+        }
+        Ok(())
     }
 
-    /// Close the channel, effective after a waiting period. The recipient can
-    /// still withdraw during the waiting period. After the close is effective,
-    /// the funder can call refund to reclaim the remaining balance.
+    /// Begin closing the channel, effective after a waiting period. The
+    /// recipient can still close during the waiting period. After the close is
+    /// effective, the funder can call refund to reclaim the remaining
+    /// balance.
     ///
-    /// **Important:** The recipient should withdraw funds using `withdraw`
+    /// **Important:** The recipient should close using `close`
     /// whenever they see a [`event::Close`], before the close becomes effective.
-    /// After the close is effective the funder can refund the remaining balance.
-    /// The recipient can still withdraw even after the close is effective, up
-    /// until `refund` is called.
+    /// After the close is effective the funder can call `refund` to reclaim
+    /// the remaining balance, and the recipient can no longer call `close`.
     ///
     /// Callable by the funder (from).
     ///
     /// # Auth
     /// - `from`: required.
-    pub fn close(env: &Env) {
+    pub fn close_start(env: &Env) -> Result<(), Error> {
+        // Reject if the close effective ledger has already been reached.
+        if let Some(effective_at_ledger) = Self::close_effective_at_ledger(env) {
+            if env.ledger().sequence() >= effective_at_ledger {
+                return Err(Error::AlreadyClosed);
+            }
+        }
+
         // Verify the funder.
         let from = Self::from(env);
         from.require_auth();
@@ -464,13 +461,14 @@ impl Contract {
         env.storage().instance().set(&DataKey::CloseEffectiveAtLedger, &effective_at_ledger);
 
         env.events().publish_event(&event::Close { effective_at_ledger });
+        Ok(())
     }
 
     /// Refund the remaining balance to the funder after the close is effective.
     ///
     /// Can be called multiple times. This is useful if the funder accidentally
-    /// deposits additional funds after closing — they can call refund again to
-    /// reclaim the additional balance.
+    /// deposits additional funds after closing — they can call refund
+    /// again to reclaim the additional balance.
     ///
     /// Callable by the funder (from), after the close effective_at_ledger has
     /// been reached.
@@ -479,7 +477,7 @@ impl Contract {
     /// - `from`: required.
     pub fn refund(env: &Env) -> Result<(), Error> {
         // Verify the close is effective.
-        let effective_at_ledger: u32 = env.storage().instance().get(&DataKey::CloseEffectiveAtLedger).ok_or(Error::NotClosed)?;
+        let effective_at_ledger = Self::close_effective_at_ledger(env).ok_or(Error::NotClosed)?;
         if env.ledger().sequence() < effective_at_ledger {
             return Err(Error::RefundWaitingPeriodNotElapsed);
         }
@@ -502,6 +500,10 @@ impl Contract {
 impl Contract {
     fn token_client(env: &Env) -> token::Client<'_> {
         token::Client::new(env, &Self::token(env))
+    }
+
+    fn close_effective_at_ledger(env: &Env) -> Option<u32> {
+        env.storage().instance().get(&DataKey::CloseEffectiveAtLedger)
     }
 }
 
