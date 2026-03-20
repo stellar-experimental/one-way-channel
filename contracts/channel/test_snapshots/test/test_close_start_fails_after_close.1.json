@@ -62,7 +62,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "bytes": "20828bf5c5bdcacb684863336c202fb5599da48be5596615742170705beca9f7"
+                  "bytes": "511c34a1a2cb521df16bb246b8de8e7997ce235c7e76b22a3d7503a24819dd8a"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
@@ -114,7 +114,7 @@
                   "i128": "300"
                 },
                 {
-                  "bytes": "8c44662d11e26d32688a8ebd1c2c76b0cfef4048503f3f75a6d885d8c822d572813ab6c834fb54a1ada4f118453f1063e23e9288242a7607cfd0889c765b5f04"
+                  "bytes": "750c390a9792fd471ac8edd7bf25744a6dd8f56b244e804eefa461f691d7323c29fc65b71fdef4e4d93ade0b0a908c2e30ef86ecde272e8b1721b1145b240304"
                 }
               ]
             }
@@ -272,7 +272,7 @@
                         ]
                       },
                       "val": {
-                        "bytes": "20828bf5c5bdcacb684863336c202fb5599da48be5596615742170705beca9f7"
+                        "bytes": "511c34a1a2cb521df16bb246b8de8e7997ce235c7e76b22a3d7503a24819dd8a"
                       }
                     },
                     {
@@ -321,6 +321,18 @@
                       },
                       "val": {
                         "address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "WithdrawnAmount"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "i128": "300"
                       }
                     }
                   ]

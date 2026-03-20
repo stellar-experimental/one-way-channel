@@ -64,8 +64,9 @@ echo "Channel: $(stellar contract alias show channel1)"
 
 echo ""
 echo "=== Channel state after open ==="
-echo -n "Balance: "
-stellar contract invoke --id channel1 --send=no -- balance
+echo -n "  Deposited: " && stellar contract invoke --id channel1 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel1 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel1 --send=no -- balance
 
 echo ""
 echo "=== Off-chain: Funder signs commitment ==="
@@ -82,8 +83,9 @@ stellar contract invoke \
 
 echo ""
 echo "=== Channel state after close ==="
-echo -n "Balance: "
-stellar contract invoke --id channel1 --send=no -- balance
+echo -n "  Deposited: " && stellar contract invoke --id channel1 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel1 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel1 --send=no -- balance
 
 echo ""
 echo "========================================="
@@ -107,8 +109,9 @@ echo "Channel: $(stellar contract alias show channel2)"
 
 echo ""
 echo "=== Channel state after open ==="
-echo -n "Balance: "
-stellar contract invoke --id channel2 --send=no -- balance
+echo -n "  Deposited: " && stellar contract invoke --id channel2 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel2 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel2 --send=no -- balance
 
 echo ""
 echo "=== Funder starts closing channel ==="
@@ -126,8 +129,9 @@ done
 
 echo ""
 echo "=== Channel state after refund ==="
-echo -n "Balance: "
-stellar contract invoke --id channel2 --send=no -- balance
+echo -n "  Deposited: " && stellar contract invoke --id channel2 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel2 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel2 --send=no -- balance
 
 echo ""
 echo "========================================="
@@ -151,8 +155,9 @@ echo "Channel: $(stellar contract alias show channel3)"
 
 echo ""
 echo "=== Channel state after open ==="
-echo -n "Balance: "
-stellar contract invoke --id channel3 --send=no -- balance
+echo -n "  Deposited: " && stellar contract invoke --id channel3 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel3 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel3 --send=no -- balance
 
 echo ""
 echo "=== Off-chain: Funder signs commitment ==="
@@ -176,8 +181,9 @@ stellar contract invoke \
 
 echo ""
 echo "=== Channel state after close ==="
-echo -n "Balance: "
-stellar contract invoke --id channel3 --send=no -- balance
+echo -n "  Deposited: " && stellar contract invoke --id channel3 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel3 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel3 --send=no -- balance
 
 echo ""
 echo "=== Done ==="

@@ -31,7 +31,7 @@ pub struct Close {
     pub effective_at_ledger: u32,
 }
 
-/// Emitted when the recipient receives funds via close.
+/// Emitted when the recipient receives funds via settle or close.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Withdraw {
