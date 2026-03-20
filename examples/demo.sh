@@ -64,8 +64,9 @@ echo "Channel: $(stellar contract alias show channel1)"
 
 echo ""
 echo "=== Channel state after open ==="
-echo -n "Balance: "
-stellar contract invoke --id channel1 --send=no -- balance
+echo -n "  Deposited: " && stellar contract invoke --id channel1 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel1 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel1 --send=no -- balance
 
 echo ""
 echo "=== Off-chain: Funder signs commitment ==="
@@ -82,8 +83,9 @@ stellar contract invoke \
 
 echo ""
 echo "=== Channel state after close ==="
-echo -n "Balance: "
-stellar contract invoke --id channel1 --send=no -- balance
+echo -n "  Deposited: " && stellar contract invoke --id channel1 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel1 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel1 --send=no -- balance
 
 echo ""
 echo "========================================="
@@ -107,8 +109,9 @@ echo "Channel: $(stellar contract alias show channel2)"
 
 echo ""
 echo "=== Channel state after open ==="
-echo -n "Balance: "
-stellar contract invoke --id channel2 --send=no -- balance
+echo -n "  Deposited: " && stellar contract invoke --id channel2 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel2 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel2 --send=no -- balance
 
 echo ""
 echo "=== Funder starts closing channel ==="
@@ -126,8 +129,9 @@ done
 
 echo ""
 echo "=== Channel state after refund ==="
-echo -n "Balance: "
-stellar contract invoke --id channel2 --send=no -- balance
+echo -n "  Deposited: " && stellar contract invoke --id channel2 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel2 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel2 --send=no -- balance
 
 echo ""
 echo "========================================="
@@ -151,8 +155,9 @@ echo "Channel: $(stellar contract alias show channel3)"
 
 echo ""
 echo "=== Channel state after open ==="
-echo -n "Balance: "
-stellar contract invoke --id channel3 --send=no -- balance
+echo -n "  Deposited: " && stellar contract invoke --id channel3 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel3 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel3 --send=no -- balance
 
 echo ""
 echo "=== Off-chain: Funder signs commitment ==="
@@ -176,8 +181,92 @@ stellar contract invoke \
 
 echo ""
 echo "=== Channel state after close ==="
-echo -n "Balance: "
-stellar contract invoke --id channel3 --send=no -- balance
+echo -n "  Deposited: " && stellar contract invoke --id channel3 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel3 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel3 --send=no -- balance
+
+echo ""
+echo "========================================="
+echo "  Scenario 4: Settle before close"
+echo "========================================="
+
+echo ""
+echo "=== Deploying channel contract ==="
+stellar contract deploy \
+    --alias channel4 \
+    --wasm-hash $WASM_HASH \
+    --source funder \
+    -- \
+    --token native \
+    --from funder \
+    --commitment_key $COMMITMENT_PKEY \
+    --to recipient \
+    --amount 10000000 \
+    --refund_waiting_period 5
+echo "Channel: $(stellar contract alias show channel4)"
+
+echo ""
+echo "=== Channel state after open ==="
+echo -n "  Deposited: " && stellar contract invoke --id channel4 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel4 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel4 --send=no -- balance
+
+echo ""
+echo "=== Off-chain: Funder signs commitments ==="
+COMMITMENT_4A=$(stellar contract invoke --id channel4 --send=no -- prepare_commitment --amount 3000000)
+SIG_4A=$(ed25519 sign $COMMITMENT_SKEY $COMMITMENT_4A)
+echo "  Payment 1: cumulative 3,000,000 stroops, sig=$SIG_4A"
+
+COMMITMENT_4B=$(stellar contract invoke --id channel4 --send=no -- prepare_commitment --amount 6000000)
+SIG_4B=$(ed25519 sign $COMMITMENT_SKEY $COMMITMENT_4B)
+echo "  Payment 2: cumulative 6,000,000 stroops, sig=$SIG_4B"
+
+COMMITMENT_4C=$(stellar contract invoke --id channel4 --send=no -- prepare_commitment --amount 8000000)
+SIG_4C=$(ed25519 sign $COMMITMENT_SKEY $COMMITMENT_4C)
+echo "  Payment 3: cumulative 8,000,000 stroops, sig=$SIG_4C"
+
+echo ""
+echo "=== Recipient settles using commitment 1 ==="
+stellar keys use recipient
+stellar contract invoke \
+    --id channel4 \
+    -- settle --amount 3000000 --sig $SIG_4A
+
+echo ""
+echo "=== Channel state after first settle ==="
+echo -n "  Deposited: " && stellar contract invoke --id channel4 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel4 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel4 --send=no -- balance
+
+echo ""
+echo "=== Recipient settles using commitment 2 (skipping none) ==="
+stellar contract invoke \
+    --id channel4 \
+    -- settle --amount 6000000 --sig $SIG_4B
+
+echo ""
+echo "=== Channel state after second settle ==="
+echo -n "  Deposited: " && stellar contract invoke --id channel4 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel4 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel4 --send=no -- balance
+
+echo ""
+echo "=== Recipient closes channel using commitment 3 ==="
+stellar contract invoke \
+    --id channel4 \
+    -- close --amount 8000000 --sig $SIG_4C
+
+echo ""
+echo "=== Channel state after close ==="
+echo -n "  Deposited: " && stellar contract invoke --id channel4 --send=no -- deposited
+echo -n "  Withdrawn: " && stellar contract invoke --id channel4 --send=no -- withdrawn
+echo -n "  Balance:   " && stellar contract invoke --id channel4 --send=no -- balance
 
 echo ""
 echo "=== Done ==="
+echo ""
+echo "Summary:"
+echo "  Channel 1 (recipient closes):             $(stellar contract alias show channel1)"
+echo "  Channel 2 (funder close_start + refund):   $(stellar contract alias show channel2)"
+echo "  Channel 3 (close_start, recipient closes): $(stellar contract alias show channel3)"
+echo "  Channel 4 (settle before close):           $(stellar contract alias show channel4)"

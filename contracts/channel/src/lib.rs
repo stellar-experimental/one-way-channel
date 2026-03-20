@@ -48,8 +48,8 @@
 //!     Closed --> [*]: refund
 //! ```
 //!
-//! `top_up` can be called in any state. `close` can only be called before
-//! the channel is closed.
+//! `top_up` and `settle` can be called in any state. `close` can only be
+//! called before the channel is closed.
 //!
 //! ## Functions
 //!
@@ -59,6 +59,7 @@
 //! |---|---|
 //! | `__constructor` | Open a channel with an initial deposit. Callable by the funder, or anyone if amount is zero. |
 //! | `top_up` | Deposit additional tokens into the channel. |
+//! | `settle` | Withdraw funds using a signed commitment without closing the channel. |
 //! | `close` | Close the channel using a signed commitment, withdrawing funds to the recipient. Automatically attempts to refund the funder. |
 //! | `close_start` | Begin closing the channel, effective after a waiting period. |
 //! | `refund` | Refund the remaining balance to the funder after the close is effective. |
@@ -69,7 +70,7 @@
 //! |---|---|
 //! | `prepare_commitment` | Generate the commitment bytes to sign. |
 //!
-//! ### Getters
+//! ### Getters (static)
 //!
 //! | Function | Description |
 //! |---|---|
@@ -77,7 +78,14 @@
 //! | `from` | Returns the funder address. |
 //! | `to` | Returns the recipient address. |
 //! | `refund_waiting_period` | Returns the refund waiting period in ledgers. |
+//!
+//! ### Getters (dynamic)
+//!
+//! | Function | Description |
+//! |---|---|
+//! | `deposited` | Returns the total amount deposited. |
 //! | `balance` | Returns the current balance. |
+//! | `withdrawn` | Returns the total amount already withdrawn. |
 //!
 //! ## Lifecycle
 //!
@@ -94,12 +102,14 @@
 //! ### 2. Off-chain payments
 //!
 //! The funder makes payments by signing commitments off-chain and sending them
-//! to the recipient. A commitment authorizes the recipient to close the
-//! channel and receive the specified amount.
+//! to the recipient. A commitment authorizes the recipient to settle or
+//! close the channel and receive a **cumulative total** amount. Each new
+//! commitment replaces the previous one.
 //!
 //! For example:
-//! - Commitment for 100: recipient can close the channel and receive 100.
-//! - Commitment for 140: recipient can close the channel and receive 140.
+//! - Commitment for 100: recipient can settle or close and receive 100.
+//! - Commitment for 140: recipient can settle or close and receive 140
+//!   (40 more if 100 was already settled).
 //!
 //! A commitment is an XDR serialized [`Commitment`] struct containing a domain
 //! separator (`chancmmt`), the network ID, the channel contract address, and
@@ -120,12 +130,25 @@
 //! })
 //! ```
 //!
-//! ### 3. Close
+//! ### 3. Settle
+//!
+//! The recipient calls [`Contract::settle`] at any time with a commitment
+//! amount and its signature. The contract verifies the signature, then
+//! transfers the difference between the commitment amount and what has
+//! already been withdrawn. If the commitment amount is less than or equal
+//! to what has already been withdrawn, no transfer occurs.
+//!
+//! Settlement is optional. The recipient does not need to settle at all —
+//! [`Contract::close`] will also settle any unsettled amount. The recipient
+//! may choose to settle periodically to receive funds without closing the
+//! channel.
+//!
+//! ### 4. Close
 //!
 //! The recipient calls [`Contract::close`] with a commitment amount and its
-//! signature before the close effective ledger is reached. The contract
-//! verifies the signature, then transfers the commitment amount to the
-//! recipient.
+//! signature before the close effective ledger is reached. Like `settle`,
+//! only the difference between the commitment amount and what has already
+//! been withdrawn is transferred.
 //!
 //! After transferring the committed funds, the close function automatically
 //! attempts to refund the remaining balance to the funder. This refund attempt
@@ -136,7 +159,7 @@
 //! Cannot be called after the close effective ledger has been reached
 //! (i.e. after a `close_start` waiting period has elapsed).
 //!
-//! ### 4. Close Start
+//! ### 5. Close Start
 //!
 //! The funder calls [`Contract::close_start`] to begin closing the channel.
 //! The close does not take effect immediately — there is a waiting period of
@@ -150,7 +173,7 @@
 //! **Important:** The recipient should monitor for [`event::Close`] events and
 //! close before the close_start becomes effective.
 //!
-//! ### 5. Refund
+//! ### 6. Refund
 //!
 //! After the refund waiting period has elapsed, the funder calls
 //! [`Contract::refund`] to reclaim whatever balance remains in the channel.
@@ -194,6 +217,7 @@ pub enum DataKey {
     CommitmentKey,
     To,
     RefundWaitingPeriod,
+    WithdrawnAmount,
     CloseEffectiveAtLedger,
 }
 
@@ -341,7 +365,8 @@ impl Contract {
         env.storage().instance().get(&DataKey::RefundWaitingPeriod).unwrap()
     }
 
-    /// Returns the balance of the channel.
+    /// Returns the balance of the channel. This is the deposited amount
+    /// minus any amount already withdrawn.
     ///
     /// Callable by anyone.
     ///
@@ -351,12 +376,36 @@ impl Contract {
         Self::token_client(env).balance(&env.current_contract_address())
     }
 
+    /// Returns the total amount deposited into the channel.
+    ///
+    /// This is the balance plus the amount already withdrawn. Refunded
+    /// amounts are considered no longer deposited.
+    ///
+    /// Callable by anyone.
+    ///
+    /// # Auth
+    /// None.
+    pub fn deposited(env: &Env) -> i128 {
+        Self::balance(env) + Self::withdrawn(env)
+    }
+
+    /// Returns the total amount already withdrawn by the recipient via
+    /// `settle` or `close`.
+    ///
+    /// Callable by anyone.
+    ///
+    /// # Auth
+    /// None.
+    pub fn withdrawn(env: &Env) -> i128 {
+        env.storage().instance().get(&DataKey::WithdrawnAmount).unwrap_or(0)
+    }
+
     /// Returns the XDR serialized bytes of a commitment for the given amount.
     ///
     /// The returned bytes must be signed by the ed25519 key corresponding to
     /// the `commitment_key` stored in the channel. The resulting signature,
-    /// along with the amount, can be passed to `close` by the
-    /// recipient to close the channel.
+    /// along with the amount, can be passed to `settle` or `close` by the
+    /// recipient.
     ///
     /// Commitments are typically prepared off-chain. This function is provided
     /// as a convenience.
@@ -370,8 +419,47 @@ impl Contract {
         Commitment::new(env.current_contract_address(), amount).into_bytes()
     }
 
+    /// Settle funds to the recipient using a signed commitment without closing
+    /// the channel. The amount is the cumulative total the recipient is
+    /// entitled to. Only the difference between the amount and what has already
+    /// been withdrawn is transferred.
+    ///
+    /// The recipient does not need to settle after every commitment. They can
+    /// accumulate multiple commitments and settle using only the latest
+    /// (highest amount) commitment.
+    ///
+    /// If an older commitment with a lower amount is used after a higher amount
+    /// has already been withdrawn, no funds are transferred.
+    ///
+    /// Can be called even after the channel is closed, up until the funder
+    /// calls [`Contract::refund`] and the balance is drained.
+    ///
+    /// Callable by the recipient (to).
+    ///
+    /// # Auth
+    /// - `to`: required.
+    /// - Commitment signature serves as commitment_key authorization.
+    pub fn settle(env: &Env, amount: i128, sig: BytesN<64>) {
+        assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
+
+        // Verify the recipient and commitment signature.
+        let to = Self::to(env);
+        to.require_auth();
+        Commitment::new(env.current_contract_address(), amount).verify(&sig);
+
+        // Transfer only the difference from what has already been withdrawn.
+        let payout = amount - Self::withdrawn(env);
+        if payout > 0 {
+            env.storage().instance().set(&DataKey::WithdrawnAmount, &amount);
+            Self::token_client(env).transfer(&env.current_contract_address(), &to, &payout);
+            env.events().publish_event(&event::Withdraw { to, amount: payout });
+        }
+    }
+
     /// Close the channel using a signed commitment, withdrawing funds to the
-    /// recipient. The committed amount is transferred to the recipient.
+    /// recipient. The amount is the cumulative total the recipient is entitled
+    /// to. Only the difference between the amount and what has already been
+    /// withdrawn is transferred.
     ///
     /// After transferring, this function automatically attempts to refund the
     /// remaining balance to the funder using `try_transfer`. This refund
@@ -406,10 +494,12 @@ impl Contract {
         to.require_auth();
         Commitment::new(env.current_contract_address(), amount).verify(&sig);
 
-        // Transfer the committed amount to the recipient.
-        if amount > 0 {
-            Self::token_client(env).transfer(&env.current_contract_address(), &to, &amount);
-            env.events().publish_event(&event::Withdraw { to, amount });
+        // Transfer only the difference from what has already been withdrawn.
+        let payout = amount - Self::withdrawn(env);
+        if payout > 0 {
+            env.storage().instance().set(&DataKey::WithdrawnAmount, &amount);
+            Self::token_client(env).transfer(&env.current_contract_address(), &to, &payout);
+            env.events().publish_event(&event::Withdraw { to, amount: payout });
         }
 
         // Mark the channel as closed immediately.

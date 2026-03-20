@@ -62,7 +62,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "bytes": "91a28a0b74381593a4d9469579208926afc8ad82c8839b7644359b9eba9a4b3a"
+                  "bytes": "204040e364c10f2bec9c1fe500a1cd4c247c89d650a01ed7e82caba867877c21"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
@@ -132,7 +132,6 @@
       ]
     ],
     [],
-    [],
     [
       [
         "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
@@ -148,7 +147,6 @@
         }
       ]
     ],
-    [],
     []
   ],
   "ledger": {
@@ -338,7 +336,7 @@
                         ]
                       },
                       "val": {
-                        "bytes": "91a28a0b74381593a4d9469579208926afc8ad82c8839b7644359b9eba9a4b3a"
+                        "bytes": "204040e364c10f2bec9c1fe500a1cd4c247c89d650a01ed7e82caba867877c21"
                       }
                     },
                     {
