@@ -12,10 +12,10 @@
 //! ## Participants
 //!
 //! - **Funder (`from`)**: Deposits tokens into the channel and signs
-//!   commitments authorizing the recipient to close the channel and receive a
-//!   given amount.
-//! - **Recipient (`to`)**: Receives commitments off-chain and can close the
-//!   channel on-chain at any time using a signed commitment.
+//!   commitments authorizing the recipient to settle or close the channel
+//!   and receive a given amount.
+//! - **Recipient (`to`)**: Receives commitments off-chain and can settle or
+//!   close the channel on-chain at any time using a signed commitment.
 //!
 //! ## Expectations
 //!
@@ -33,8 +33,8 @@
 //! - Verifies the `amount` in each commitment is less than the channels
 //!   balance.
 //! - Monitors the channel for [`event::Close`] events.
-//! - Calls `close` with a commitment promptly after seeing a close_start
-//!   event, before the refund waiting period elapses.
+//! - Calls `settle` or `close` with a commitment promptly after seeing a
+//!   close_start event, before the refund waiting period elapses.
 //!
 //! ## State diagram
 //!
@@ -178,7 +178,8 @@
 //! After the refund waiting period has elapsed, the funder calls
 //! [`Contract::refund`] to reclaim whatever balance remains in the channel.
 //! This transfers the **entire** remaining token balance to the funder,
-//! including any amount the recipient was entitled to but did not close for.
+//! including any amount the recipient was entitled to but did not settle or
+//! close for.
 //! The contract does not reserve funds for the recipient. If the recipient
 //! has not closed before the funder calls refund, those funds are lost to
 //! the recipient and assumed to be of no interest to the recipient.
@@ -191,8 +192,8 @@
 //!   channel contract address, preventing signatures from being reused across
 //!   networks, channels, or confused with other signed payloads.
 //! - The refund waiting period protects the recipient: it gives them time to
-//!   close using their latest commitment before the funder can reclaim
-//!   funds.
+//!   settle or close using their latest commitment before the funder can
+//!   reclaim funds.
 
 #![no_std]
 #[allow(unused_imports)]
@@ -265,8 +266,8 @@ impl Contract {
     /// - `commitment_key`: The ed25519 public key used to verify commitment
     ///   signatures. See `prepare_commitment` for details on
     ///   commitments.
-    /// - `to`: The recipient who can close the channel using signed
-    ///   commitments.
+    /// - `to`: The recipient who can settle or close the channel using
+    ///   signed commitments.
     /// - `amount`: The initial deposit amount.
     /// - `refund_waiting_period`: The number of ledgers the recipient has to
     ///   close after `close_start` is called, before `refund`

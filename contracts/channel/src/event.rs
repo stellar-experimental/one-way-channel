@@ -8,7 +8,7 @@ pub struct Open {
     pub from: Address,
     /// The ed25519 public key used to verify commitment signatures.
     pub commitment_key: BytesN<32>,
-    /// The recipient who can close the channel using a commitment.
+    /// The recipient who can settle or close the channel using a commitment.
     pub to: Address,
     /// The SEP-41 token used for payments.
     pub token: Address,
