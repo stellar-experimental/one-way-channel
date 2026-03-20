@@ -378,7 +378,8 @@ impl Contract {
 
     /// Returns the total amount deposited into the channel.
     ///
-    /// This is the balance plus the amount already withdrawn.
+    /// This is the balance plus the amount already withdrawn. Refunded
+    /// amounts are considered no longer deposited.
     ///
     /// Callable by anyone.
     ///
@@ -429,6 +430,9 @@ impl Contract {
     ///
     /// If an older commitment with a lower amount is used after a higher amount
     /// has already been withdrawn, no funds are transferred.
+    ///
+    /// Can be called even after the channel is closed, up until the funder
+    /// calls [`Contract::refund`] and the balance is drained.
     ///
     /// Callable by the recipient (to).
     ///
