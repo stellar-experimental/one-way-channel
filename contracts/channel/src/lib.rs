@@ -12,10 +12,10 @@
 //! ## Participants
 //!
 //! - **Funder (`from`)**: Deposits tokens into the channel and signs
-//!   commitments authorizing the recipient to close the channel and receive a
-//!   given amount.
-//! - **Recipient (`to`)**: Receives commitments off-chain and can close the
-//!   channel on-chain at any time using a signed commitment.
+//!   commitments authorizing the recipient to settle or close the channel
+//!   and receive a given amount.
+//! - **Recipient (`to`)**: Receives commitments off-chain and can settle or
+//!   close the channel on-chain at any time using a signed commitment.
 //!
 //! ## Expectations
 //!
@@ -33,8 +33,8 @@
 //! - Verifies the `amount` in each commitment is less than the channels
 //!   balance.
 //! - Monitors the channel for [`event::Close`] events.
-//! - Calls `close` with a commitment promptly after seeing a close_start
-//!   event, before the refund waiting period elapses.
+//! - Calls `settle` with a commitment promptly after seeing a close_start
+//!   event, before the funder calls `refund`.
 //!
 //! ## State diagram
 //!
@@ -48,8 +48,7 @@
 //!     Closed --> [*]: refund
 //! ```
 //!
-//! `top_up` and `settle` can be called in any state. `close` can only be
-//! called before the channel is closed.
+//! `top_up`, `settle`, and `close` can be called in any state.
 //!
 //! ## Functions
 //!
@@ -146,9 +145,8 @@
 //! ### 4. Close
 //!
 //! The recipient calls [`Contract::close`] with a commitment amount and its
-//! signature before the close effective ledger is reached. Like `settle`,
-//! only the difference between the commitment amount and what has already
-//! been withdrawn is transferred.
+//! signature. Like `settle`, only the difference between the commitment
+//! amount and what has already been withdrawn is transferred.
 //!
 //! After transferring the committed funds, the close function automatically
 //! attempts to refund the remaining balance to the funder. This refund attempt
@@ -156,8 +154,8 @@
 //! withdrawal. If the automatic refund fails, the funder can call
 //! [`Contract::refund`] to reclaim the remaining balance.
 //!
-//! Cannot be called after the close effective ledger has been reached
-//! (i.e. after a `close_start` waiting period has elapsed).
+//! Like `settle`, can be called even after the channel is closed, up until
+//! the funder calls [`Contract::refund`] and the balance is drained.
 //!
 //! ### 5. Close Start
 //!
@@ -165,20 +163,20 @@
 //! The close does not take effect immediately — there is a waiting period of
 //! `refund_waiting_period` ledgers.
 //!
-//! The recipient can still call [`Contract::close`] during the waiting
-//! period. Once the waiting period has elapsed, the recipient can no longer
-//! call `close`, and the funder can call `refund` to reclaim the remaining
-//! balance.
+//! The recipient can still call [`Contract::settle`] or [`Contract::close`]
+//! during and after the waiting period. Once the waiting period has elapsed,
+//! the funder can call `refund` to reclaim the remaining balance.
 //!
 //! **Important:** The recipient should monitor for [`event::Close`] events and
-//! close before the close_start becomes effective.
+//! settle or close before the funder calls `refund`.
 //!
 //! ### 6. Refund
 //!
 //! After the refund waiting period has elapsed, the funder calls
 //! [`Contract::refund`] to reclaim whatever balance remains in the channel.
 //! This transfers the **entire** remaining token balance to the funder,
-//! including any amount the recipient was entitled to but did not close for.
+//! including any amount the recipient was entitled to but did not settle or
+//! close for.
 //! The contract does not reserve funds for the recipient. If the recipient
 //! has not closed before the funder calls refund, those funds are lost to
 //! the recipient and assumed to be of no interest to the recipient.
@@ -191,8 +189,8 @@
 //!   channel contract address, preventing signatures from being reused across
 //!   networks, channels, or confused with other signed payloads.
 //! - The refund waiting period protects the recipient: it gives them time to
-//!   close using their latest commitment before the funder can reclaim
-//!   funds.
+//!   settle or close using their latest commitment before the funder can
+//!   reclaim funds.
 
 #![no_std]
 #[allow(unused_imports)]
@@ -265,8 +263,8 @@ impl Contract {
     /// - `commitment_key`: The ed25519 public key used to verify commitment
     ///   signatures. See `prepare_commitment` for details on
     ///   commitments.
-    /// - `to`: The recipient who can close the channel using signed
-    ///   commitments.
+    /// - `to`: The recipient who can settle or close the channel using
+    ///   signed commitments.
     /// - `amount`: The initial deposit amount.
     /// - `refund_waiting_period`: The number of ledgers the recipient has to
     ///   close after `close_start` is called, before `refund`
@@ -467,27 +465,16 @@ impl Contract {
     /// If the automatic refund fails, the funder can call [`Contract::refund`]
     /// to reclaim the remaining balance.
     ///
-    /// Cannot be called after the close effective ledger has been reached
-    /// (i.e. after a `close_start` waiting period has elapsed).
-    ///
-    /// **Important:** The recipient should call this whenever they see a
-    /// [`event::Close`], before the close becomes effective. After the close is
-    /// effective the funder can refund the remaining balance.
+    /// Can be called even after the channel is closed, up until the funder
+    /// calls [`Contract::refund`] and the balance is drained.
     ///
     /// Callable by the recipient (to).
     ///
     /// # Auth
     /// - `to`: required.
     /// - Commitment signature serves as commitment_key authorization.
-    pub fn close(env: &Env, amount: i128, sig: BytesN<64>) -> Result<(), Error> {
+    pub fn close(env: &Env, amount: i128, sig: BytesN<64>) {
         assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
-
-        // Reject if the close effective ledger has already been reached.
-        if let Some(effective_at_ledger) = Self::close_effective_at_ledger(env) {
-            if env.ledger().sequence() >= effective_at_ledger {
-                return Err(Error::AlreadyClosed);
-            }
-        }
 
         // Verify the recipient and commitment signature.
         let to = Self::to(env);
@@ -502,10 +489,17 @@ impl Contract {
             env.events().publish_event(&event::Withdraw { to, amount: payout });
         }
 
-        // Mark the channel as closed immediately.
+        // Mark the channel as closed immediately if not already closed, or
+        // resolve a pending close_start by setting the effective ledger to now.
+        // If already effective, don't change it, the channel is already
+        // effectively closed, and this close is just withdrawaing and
+        // refunding.
         let effective_at_ledger = env.ledger().sequence();
-        env.storage().instance().set(&DataKey::CloseEffectiveAtLedger, &effective_at_ledger);
-        env.events().publish_event(&event::Close { effective_at_ledger });
+        let already_effective = Self::close_effective_at_ledger(env).is_some_and(|l| l <= effective_at_ledger);
+        if !already_effective {
+            env.storage().instance().set(&DataKey::CloseEffectiveAtLedger, &effective_at_ledger);
+            env.events().publish_event(&event::Close { effective_at_ledger });
+        }
 
         // Attempt to refund the remaining balance to the funder.
         let from = Self::from(env);
@@ -516,18 +510,15 @@ impl Contract {
                 env.events().publish_event(&event::Refund { from, amount: balance });
             }
         }
-        Ok(())
     }
 
     /// Begin closing the channel, effective after a waiting period. The
-    /// recipient can still close during the waiting period. After the close is
-    /// effective, the funder can call refund to reclaim the remaining
-    /// balance.
+    /// recipient can still settle or close during and after the waiting
+    /// period. After the close is effective, the funder can call refund to
+    /// reclaim the remaining balance.
     ///
-    /// **Important:** The recipient should close using `close`
-    /// whenever they see a [`event::Close`], before the close becomes effective.
-    /// After the close is effective the funder can call `refund` to reclaim
-    /// the remaining balance, and the recipient can no longer call `close`.
+    /// **Important:** The recipient should settle or close whenever they see
+    /// a [`event::Close`], before the funder calls `refund`.
     ///
     /// Callable by the funder (from).
     ///

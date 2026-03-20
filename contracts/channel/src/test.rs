@@ -392,9 +392,10 @@ fn test_invalid_signature() {
     assert!(result.is_err());
 }
 
-/// Close fails after the close_start effective ledger has been reached.
+/// Close works after the close_start effective ledger has been reached,
+/// as long as there is still balance.
 #[test]
-fn test_close_fails_after_close_start_effective() {
+fn test_close_after_close_start_effective() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -405,7 +406,7 @@ fn test_close_fails_after_close_start_effective() {
     let funder = Address::generate(&env);
     let refund_waiting_period: u32 = 100;
 
-    let (token_addr, _token, asset_admin) = create_token(&env);
+    let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
@@ -417,9 +418,12 @@ fn test_close_fails_after_close_start_effective() {
         li.sequence_number += refund_waiting_period + 1;
     });
 
+    // Close still works after the effective ledger.
     let sig = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
-    let result = client.try_close(&300, &sig);
-    assert!(result.is_err());
+    client.close(&300, &sig);
+    assert_eq!(token.balance(&to), 300);
+    assert_eq!(token.balance(&funder), 700);
+    assert_eq!(token.balance(&channel_id), 0);
 }
 
 /// The funder can top up the channel after creation.
@@ -709,9 +713,10 @@ fn test_refund_after_close() {
     assert_eq!(token.balance(&funder), 700);
 }
 
-/// Calling close a second time fails with AlreadyClosed.
+/// Calling close a second time succeeds but does not transfer more than
+/// the cumulative committed amount.
 #[test]
-fn test_close_twice_fails() {
+fn test_close_twice() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -721,18 +726,27 @@ fn test_close_twice_fails() {
     let to = Address::generate(&env);
     let funder = Address::generate(&env);
 
-    let (token_addr, _token, asset_admin) = create_token(&env);
-    asset_admin.mint(&funder, &1000);
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &2000);
 
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
+    // First close: transfers 300, auto-refunds 200.
     let sig1 = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
     client.close(&300, &sig1);
+    assert_eq!(token.balance(&to), 300);
+    assert_eq!(token.balance(&funder), 1700);
 
-    let sig2 = Commitment::new(channel_id.clone(), 100).sign(&auth_key);
-    let result = client.try_close(&100, &sig2);
-    assert!(result.is_err());
+    // Top up again.
+    client.top_up(&500);
+
+    // Second close with higher commitment: transfers only the difference (200).
+    let sig2 = Commitment::new(channel_id.clone(), 500).sign(&auth_key);
+    client.close(&500, &sig2);
+    assert_eq!(token.balance(&to), 500);
+    assert_eq!(token.balance(&funder), 1500);
+    assert_eq!(token.balance(&channel_id), 0);
 }
 
 /// Close panics if the commitment amount exceeds the channel balance.

@@ -12,10 +12,10 @@ closing it. This avoids per-payment transaction fees and latency.
 ## Participants
 
 - **Funder (`from`)**: Deposits tokens into the channel and signs
-  commitments authorizing the recipient to close the channel and receive a
-  given amount.
-- **Recipient (`to`)**: Receives commitments off-chain and can close the
-  channel on-chain at any time using a signed commitment.
+  commitments authorizing the recipient to settle or close the channel
+  and receive a given amount.
+- **Recipient (`to`)**: Receives commitments off-chain and can settle or
+  close the channel on-chain at any time using a signed commitment.
 
 ## Expectations
 
@@ -33,8 +33,8 @@ to them.
 - Verifies the `amount` in each commitment is less than the channels
   balance.
 - Monitors the channel for [`event::Close`] events.
-- Calls `close` with a commitment promptly after seeing a close_start
-  event, before the refund waiting period elapses.
+- Calls `settle` with a commitment promptly after seeing a close_start
+  event, before the funder calls `refund`.
 
 ## State diagram
 
@@ -48,8 +48,7 @@ stateDiagram-v2
     Closed --> [*]: refund
 ```
 
-`top_up` and `settle` can be called in any state. `close` can only be
-called before the channel is closed.
+`top_up`, `settle`, and `close` can be called in any state.
 
 ## Functions
 
@@ -146,9 +145,8 @@ channel.
 ### 4. Close
 
 The recipient calls [`Contract::close`] with a commitment amount and its
-signature before the close effective ledger is reached. Like `settle`,
-only the difference between the commitment amount and what has already
-been withdrawn is transferred.
+signature. Like `settle`, only the difference between the commitment
+amount and what has already been withdrawn is transferred.
 
 After transferring the committed funds, the close function automatically
 attempts to refund the remaining balance to the funder. This refund attempt
@@ -156,8 +154,8 @@ uses `try_transfer` and will silently succeed or fail without affecting the
 withdrawal. If the automatic refund fails, the funder can call
 [`Contract::refund`] to reclaim the remaining balance.
 
-Cannot be called after the close effective ledger has been reached
-(i.e. after a `close_start` waiting period has elapsed).
+Like `settle`, can be called even after the channel is closed, up until
+the funder calls [`Contract::refund`] and the balance is drained.
 
 ### 5. Close Start
 
@@ -165,20 +163,20 @@ The funder calls [`Contract::close_start`] to begin closing the channel.
 The close does not take effect immediately — there is a waiting period of
 `refund_waiting_period` ledgers.
 
-The recipient can still call [`Contract::close`] during the waiting
-period. Once the waiting period has elapsed, the recipient can no longer
-call `close`, and the funder can call `refund` to reclaim the remaining
-balance.
+The recipient can still call [`Contract::settle`] or [`Contract::close`]
+during and after the waiting period. Once the waiting period has elapsed,
+the funder can call `refund` to reclaim the remaining balance.
 
 **Important:** The recipient should monitor for [`event::Close`] events and
-close before the close_start becomes effective.
+settle or close before the funder calls `refund`.
 
 ### 6. Refund
 
 After the refund waiting period has elapsed, the funder calls
 [`Contract::refund`] to reclaim whatever balance remains in the channel.
 This transfers the **entire** remaining token balance to the funder,
-including any amount the recipient was entitled to but did not close for.
+including any amount the recipient was entitled to but did not settle or
+close for.
 The contract does not reserve funds for the recipient. If the recipient
 has not closed before the funder calls refund, those funds are lost to
 the recipient and assumed to be of no interest to the recipient.
@@ -191,8 +189,8 @@ the recipient and assumed to be of no interest to the recipient.
   channel contract address, preventing signatures from being reused across
   networks, channels, or confused with other signed payloads.
 - The refund waiting period protects the recipient: it gives them time to
-  close using their latest commitment before the funder can reclaim
-  funds.
+  settle or close using their latest commitment before the funder can
+  reclaim funds.
 
 # Channel Factory
 
