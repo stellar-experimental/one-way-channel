@@ -17,7 +17,7 @@
 //! | `wasm_hash` | Returns the stored channel wasm hash. |
 
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, xdr::ToXdr, Address, BytesN, Env};
 
 #[contracttype]
 pub enum DataKey {
@@ -27,6 +27,14 @@ pub enum DataKey {
 
 #[contract]
 pub struct FactoryContract;
+
+#[contracttype]
+struct DeploymentSaltPreimage(BytesN<32>, BytesN<32>, Address, Address, BytesN<32>, Address, i128, u32);
+
+fn deployment_salt(env: &Env, wasm_hash: BytesN<32>, salt: BytesN<32>, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, refund_waiting_period: u32) -> BytesN<32> {
+    let preimage = DeploymentSaltPreimage(wasm_hash, salt, token, from, commitment_key, to, amount, refund_waiting_period);
+    env.crypto().sha256(&preimage.to_xdr(env)).into()
+}
 
 #[contractimpl]
 impl FactoryContract {
@@ -82,6 +90,19 @@ impl FactoryContract {
     /// # Auth
     /// - `from`: required if amount > 0.
     pub fn open(env: &Env, salt: BytesN<32>, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, refund_waiting_period: u32) -> Address {
+        let wasm_hash = Self::wasm_hash(env);
+        let deployment_salt = deployment_salt(
+            env,
+            wasm_hash.clone(),
+            salt,
+            token.clone(),
+            from.clone(),
+            commitment_key.clone(),
+            to.clone(),
+            amount,
+            refund_waiting_period,
+        );
+
         if amount > 0 {
             // Authorize the funder at the factory level so that the channel
             // constructor's top_up does not require non-root authorization.
@@ -89,10 +110,9 @@ impl FactoryContract {
         }
 
         // Deploy the channel contract using the stored wasm hash.
-        let wasm_hash = Self::wasm_hash(env);
         let channel_address = env
             .deployer()
-            .with_current_contract(salt)
+            .with_current_contract(deployment_salt)
             .deploy_v2(wasm_hash, (token, from, commitment_key, to, amount, refund_waiting_period));
 
         channel_address
