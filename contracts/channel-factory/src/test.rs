@@ -44,12 +44,16 @@ fn test_open() {
     // Deploy a channel via the factory.
     let salt = BytesN::from_array(&env, &[0u8; 32]);
     let channel_id = factory_client.open(&salt, &token_addr, &funder, &auth_pubkey, &to, &500i128, &100u32);
-    let expected_salt = deployment_salt(&env, wasm_hash.clone(), salt.clone(), token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500, 100);
+    let expected_salt = deployment_salt(&env, funder.clone(), salt.clone());
     let expected_channel_id = env.deployer().with_address(factory_id.clone(), expected_salt).deployed_address();
     let raw_salt_channel_id = env.deployer().with_address(factory_id.clone(), salt).deployed_address();
+    let other_funder = Address::generate(&env);
+    let other_funder_salt = deployment_salt(&env, other_funder, BytesN::from_array(&env, &[0u8; 32]));
+    let other_funder_channel_id = env.deployer().with_address(factory_id.clone(), other_funder_salt).deployed_address();
 
     assert_eq!(channel_id, expected_channel_id);
     assert_ne!(channel_id, raw_salt_channel_id);
+    assert_ne!(channel_id, other_funder_channel_id);
     // Verify the channel was funded.
     assert_eq!(token.balance(&channel_id), 500);
     assert_eq!(token.balance(&funder), 500);

@@ -29,10 +29,10 @@ pub enum DataKey {
 pub struct FactoryContract;
 
 #[contracttype]
-struct DeploymentSaltPreimage(BytesN<32>, BytesN<32>, Address, Address, BytesN<32>, Address, i128, u32);
+struct DeploymentSaltPreimage(Address, BytesN<32>);
 
-fn deployment_salt(env: &Env, wasm_hash: BytesN<32>, salt: BytesN<32>, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, refund_waiting_period: u32) -> BytesN<32> {
-    let preimage = DeploymentSaltPreimage(wasm_hash, salt, token, from, commitment_key, to, amount, refund_waiting_period);
+fn deployment_salt(env: &Env, from: Address, salt: BytesN<32>) -> BytesN<32> {
+    let preimage = DeploymentSaltPreimage(from, salt);
     env.crypto().sha256(&preimage.to_xdr(env)).into()
 }
 
@@ -91,17 +91,7 @@ impl FactoryContract {
     /// - `from`: required if amount > 0.
     pub fn open(env: &Env, salt: BytesN<32>, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, refund_waiting_period: u32) -> Address {
         let wasm_hash = Self::wasm_hash(env);
-        let deployment_salt = deployment_salt(
-            env,
-            wasm_hash.clone(),
-            salt,
-            token.clone(),
-            from.clone(),
-            commitment_key.clone(),
-            to.clone(),
-            amount,
-            refund_waiting_period,
-        );
+        let deployment_salt = deployment_salt(env, from.clone(), salt);
 
         if amount > 0 {
             // Authorize the funder at the factory level so that the channel
