@@ -4,10 +4,11 @@ use ed25519_dalek::SigningKey;
 use soroban_sdk::{
     testutils::Address as _,
     token::{StellarAssetClient, TokenClient},
+    xdr::ToXdr,
     Address, BytesN, Env,
 };
 
-use crate::{FactoryContract, FactoryContractClient};
+use crate::{DeploymentSaltPreimage, FactoryContract, FactoryContractClient};
 
 mod channel_contract {
     soroban_sdk::contractimport!(file = "../../target/wasm32v1-none/release/channel.wasm");
@@ -44,7 +45,16 @@ fn test_open() {
     // Deploy a channel via the factory.
     let salt = BytesN::from_array(&env, &[0u8; 32]);
     let channel_id = factory_client.open(&salt, &token_addr, &funder, &auth_pubkey, &to, &500i128, &100u32);
+    let expected_salt: BytesN<32> = env.crypto().sha256(&DeploymentSaltPreimage(funder.clone(), salt.clone()).to_xdr(&env)).into();
+    let expected_channel_id = env.deployer().with_address(factory_id.clone(), expected_salt).deployed_address();
+    let raw_salt_channel_id = env.deployer().with_address(factory_id.clone(), salt.clone()).deployed_address();
+    let other_funder = Address::from_str(&env, "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ");
+    let other_funder_salt: BytesN<32> = env.crypto().sha256(&DeploymentSaltPreimage(other_funder, salt).to_xdr(&env)).into();
+    let other_funder_channel_id = env.deployer().with_address(factory_id.clone(), other_funder_salt).deployed_address();
 
+    assert_eq!(channel_id, expected_channel_id);
+    assert_ne!(channel_id, raw_salt_channel_id);
+    assert_ne!(channel_id, other_funder_channel_id);
     // Verify the channel was funded.
     assert_eq!(token.balance(&channel_id), 500);
     assert_eq!(token.balance(&funder), 500);
