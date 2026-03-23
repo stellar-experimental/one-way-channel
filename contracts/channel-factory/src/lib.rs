@@ -31,11 +31,6 @@ pub struct FactoryContract;
 #[contracttype]
 struct DeploymentSaltPreimage(Address, BytesN<32>);
 
-fn deployment_salt(env: &Env, from: Address, salt: BytesN<32>) -> BytesN<32> {
-    let preimage = DeploymentSaltPreimage(from, salt);
-    env.crypto().sha256(&preimage.to_xdr(env)).into()
-}
-
 #[contractimpl]
 impl FactoryContract {
     /// Initialize the factory with an admin and a channel contract wasm hash.
@@ -91,7 +86,7 @@ impl FactoryContract {
     /// - `from`: required if amount > 0.
     pub fn open(env: &Env, salt: BytesN<32>, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, refund_waiting_period: u32) -> Address {
         let wasm_hash = Self::wasm_hash(env);
-        let deployment_salt = deployment_salt(env, from.clone(), salt);
+        let deployment_salt: BytesN<32> = env.crypto().sha256(&DeploymentSaltPreimage(from.clone(), salt).to_xdr(env)).into();
 
         if amount > 0 {
             // Authorize the funder at the factory level so that the channel
