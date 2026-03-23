@@ -85,9 +85,6 @@ impl FactoryContract {
     /// # Auth
     /// - `from`: required if amount > 0.
     pub fn open(env: &Env, salt: BytesN<32>, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, amount: i128, refund_waiting_period: u32) -> Address {
-        let wasm_hash = Self::wasm_hash(env);
-        let deployment_salt: BytesN<32> = env.crypto().sha256(&DeploymentSaltPreimage(from.clone(), salt).to_xdr(env)).into();
-
         if amount > 0 {
             // Authorize the funder at the factory level so that the channel
             // constructor's top_up does not require non-root authorization.
@@ -95,6 +92,8 @@ impl FactoryContract {
         }
 
         // Deploy the channel contract using the stored wasm hash.
+        let wasm_hash = Self::wasm_hash(env);
+        let deployment_salt: BytesN<32> = env.crypto().sha256(&DeploymentSaltPreimage(from.clone(), salt).to_xdr(env)).into();
         let channel_address = env
             .deployer()
             .with_current_contract(deployment_salt)
