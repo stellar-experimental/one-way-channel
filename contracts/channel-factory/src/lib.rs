@@ -95,8 +95,11 @@ impl FactoryContract {
             .with_current_contract(salt)
             .deploy_v2(wasm_hash, (token, from, commitment_key, to, amount, refund_waiting_period));
 
+        env.events().publish_event(&event::Open { channel: channel_address.clone() });
+
         channel_address
     }
 }
 
+pub mod event;
 mod test;
