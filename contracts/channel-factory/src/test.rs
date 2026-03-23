@@ -46,9 +46,9 @@ fn test_open() {
     let channel_id = factory_client.open(&salt, &token_addr, &funder, &auth_pubkey, &to, &500i128, &100u32);
     let expected_salt = deployment_salt(&env, funder.clone(), salt.clone());
     let expected_channel_id = env.deployer().with_address(factory_id.clone(), expected_salt).deployed_address();
-    let raw_salt_channel_id = env.deployer().with_address(factory_id.clone(), salt).deployed_address();
-    let other_funder = Address::generate(&env);
-    let other_funder_salt = deployment_salt(&env, other_funder, BytesN::from_array(&env, &[0u8; 32]));
+    let raw_salt_channel_id = env.deployer().with_address(factory_id.clone(), salt.clone()).deployed_address();
+    let other_funder = Address::from_str(&env, "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ");
+    let other_funder_salt = deployment_salt(&env, other_funder, salt);
     let other_funder_channel_id = env.deployer().with_address(factory_id.clone(), other_funder_salt).deployed_address();
 
     assert_eq!(channel_id, expected_channel_id);
