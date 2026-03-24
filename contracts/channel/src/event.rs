@@ -14,6 +14,9 @@ pub struct Open {
     pub token: Address,
     /// The deposit amount.
     pub amount: i128,
+    /// The total amount already withdrawn by the recipient. Zero on first open,
+    /// may be non-zero on reopen.
+    pub withdrawn: i128,
     /// The number of ledgers the funder has to wait before refund after close_start.
     pub refund_waiting_period: u32,
 }

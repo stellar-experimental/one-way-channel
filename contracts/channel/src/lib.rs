@@ -309,6 +309,7 @@ impl Contract {
             to,
             token,
             amount,
+            withdrawn: 0,
             refund_waiting_period,
         });
     }
@@ -594,6 +595,7 @@ impl Contract {
             to: Self::to(env),
             token: Self::token(env),
             amount,
+            withdrawn: Self::withdrawn(env),
             refund_waiting_period: Self::refund_waiting_period(env),
         });
 
