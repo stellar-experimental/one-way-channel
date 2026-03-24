@@ -64,7 +64,7 @@ stateDiagram-v2
 | `close` | Close the channel using a signed commitment, withdrawing funds to the recipient. Automatically attempts to refund the funder. |
 | `close_start` | Begin closing the channel, effective after a waiting period. |
 | `refund` | Refund the remaining balance to the funder after the close is effective. |
-| `reopen` | Reopen a closed channel with an optional deposit. |
+| `reopen` | Reopen a closing or closed channel with an optional deposit. |
 
 ### Helpers
 

@@ -64,7 +64,7 @@
 //! | `close` | Close the channel using a signed commitment, withdrawing funds to the recipient. Automatically attempts to refund the funder. |
 //! | `close_start` | Begin closing the channel, effective after a waiting period. |
 //! | `refund` | Refund the remaining balance to the funder after the close is effective. |
-//! | `reopen` | Reopen a closed channel with an optional deposit. |
+//! | `reopen` | Reopen a closing or closed channel with an optional deposit. |
 //!
 //! ### Helpers
 //!
@@ -557,7 +557,8 @@ impl Contract {
         Ok(())
     }
 
-    /// Reopen a closed channel, transitioning it back to the Open state.
+    /// Reopen a closing or closed channel, transitioning it back to the Open
+    /// state.
     ///
     /// The funder can optionally deposit tokens in the same transaction by
     /// passing a non-zero `amount`.
