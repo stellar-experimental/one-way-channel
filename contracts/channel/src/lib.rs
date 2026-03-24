@@ -46,6 +46,7 @@
 //!     Closing --> Closed: close
 //!     Closing --> Closed: [after wait]
 //!     Closed --> [*]: refund
+//!     Closing --> Open: reopen
 //!     Closed --> Open: reopen
 //! ```
 //!
@@ -185,8 +186,8 @@
 //!
 //! ### 7. Reopen
 //!
-//! After the close is effective, the funder can call [`Contract::reopen`] to
-//! transition the channel back to the Open state. The `WithdrawnAmount` is
+//! After close or close_start has been called, the funder can call
+//! [`Contract::reopen`] to transition the channel back to the Open state. The `WithdrawnAmount` is
 //! preserved so that old commitment signatures cannot be replayed for funds
 //! that were already withdrawn. The funder can optionally deposit tokens in
 //! the same transaction.
@@ -564,18 +565,16 @@ impl Contract {
     /// The `WithdrawnAmount` is preserved so that old commitment signatures
     /// cannot be replayed for funds that were already withdrawn.
     ///
-    /// Callable by the funder (from), after the close is effective.
+    /// Callable by the funder (from), after close or close_start has been
+    /// called.
     ///
     /// # Auth
     /// - `from`: required.
     pub fn reopen(env: &Env, amount: i128) -> Result<(), Error> {
         assert_with_error!(env, amount >= 0, Error::NegativeAmount);
 
-        // Verify the close is effective.
-        let effective_at_ledger = Self::close_effective_at_ledger(env).ok_or(Error::NotClosed)?;
-        if env.ledger().sequence() < effective_at_ledger {
-            return Err(Error::RefundWaitingPeriodNotElapsed);
-        }
+        // Verify close or close_start has been called.
+        Self::close_effective_at_ledger(env).ok_or(Error::NotClosed)?;
 
         // Verify the funder.
         let from = Self::from(env);

@@ -910,9 +910,9 @@ fn test_reopen_fails_when_open() {
     assert!(result.is_err());
 }
 
-/// Reopen fails during the close_start waiting period.
+/// Reopen succeeds during the close_start waiting period.
 #[test]
-fn test_reopen_fails_during_closing() {
+fn test_reopen_during_closing() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -922,7 +922,7 @@ fn test_reopen_fails_during_closing() {
     let to = Address::generate(&env);
     let funder = Address::generate(&env);
 
-    let (token_addr, _token, asset_admin) = create_token(&env);
+    let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
@@ -930,8 +930,11 @@ fn test_reopen_fails_during_closing() {
 
     client.close_start();
 
-    let result = client.try_reopen(&0);
-    assert!(result.is_err());
+    client.reopen(&0);
+    assert_eq!(token.balance(&channel_id), 500);
+
+    // Channel is open again — close_start works.
+    client.close_start();
 }
 
 /// After reopen, close_start works again.

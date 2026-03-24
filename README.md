@@ -46,6 +46,7 @@ stateDiagram-v2
     Closing --> Closed: close
     Closing --> Closed: [after wait]
     Closed --> [*]: refund
+    Closing --> Open: reopen
     Closed --> Open: reopen
 ```
 
@@ -185,8 +186,8 @@ the recipient and assumed to be of no interest to the recipient.
 
 ### 7. Reopen
 
-After the close is effective, the funder can call [`Contract::reopen`] to
-transition the channel back to the Open state. The `WithdrawnAmount` is
+After close or close_start has been called, the funder can call
+[`Contract::reopen`] to transition the channel back to the Open state. The `WithdrawnAmount` is
 preserved so that old commitment signatures cannot be replayed for funds
 that were already withdrawn. The funder can optionally deposit tokens in
 the same transaction.
