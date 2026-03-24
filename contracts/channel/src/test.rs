@@ -776,6 +776,7 @@ fn test_reopen_after_close() {
 
     // Reopen with a new deposit.
     client.reopen(&400);
+    assert!(has_event_type(&env, &channel_id, "open"));
     assert_eq!(token.balance(&channel_id), 400);
     assert_eq!(token.balance(&funder), 1300);
 
@@ -933,7 +934,7 @@ fn test_reopen_fails_during_closing() {
     assert!(result.is_err());
 }
 
-/// After reopen, close_start fails with AlreadyClosed are gone.
+/// After reopen, close_start works again.
 #[test]
 fn test_close_start_works_after_reopen() {
     let env = Env::default();

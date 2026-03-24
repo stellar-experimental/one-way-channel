@@ -1,6 +1,6 @@
 use soroban_sdk::{contractevent, Address, BytesN};
 
-/// Emitted when the channel is opened via the constructor.
+/// Emitted when the channel is opened or reopened.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Open {
