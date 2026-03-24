@@ -46,6 +46,7 @@ stateDiagram-v2
     Closing --> Closed: close
     Closing --> Closed: [after wait]
     Closed --> [*]: refund
+    Closed --> Open: reopen
 ```
 
 `top_up`, `settle`, and `close` can be called in any state.
@@ -62,6 +63,7 @@ stateDiagram-v2
 | `close` | Close the channel using a signed commitment, withdrawing funds to the recipient. Automatically attempts to refund the funder. |
 | `close_start` | Begin closing the channel, effective after a waiting period. |
 | `refund` | Refund the remaining balance to the funder after the close is effective. |
+| `reopen` | Reopen a closed channel with an optional deposit. |
 
 ### Helpers
 
@@ -180,6 +182,14 @@ close for.
 The contract does not reserve funds for the recipient. If the recipient
 has not closed before the funder calls refund, those funds are lost to
 the recipient and assumed to be of no interest to the recipient.
+
+### 7. Reopen
+
+After the close is effective, the funder can call [`Contract::reopen`] to
+transition the channel back to the Open state. The `WithdrawnAmount` is
+preserved so that old commitment signatures cannot be replayed for funds
+that were already withdrawn. The funder can optionally deposit tokens in
+the same transaction.
 
 ## Security
 

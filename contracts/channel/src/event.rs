@@ -12,7 +12,7 @@ pub struct Open {
     pub to: Address,
     /// The SEP-41 token used for payments.
     pub token: Address,
-    /// The initial deposit amount.
+    /// The deposit amount.
     pub amount: i128,
     /// The number of ledgers the funder has to wait before refund after close_start.
     pub refund_waiting_period: u32,
