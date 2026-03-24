@@ -10,9 +10,9 @@ pub struct Open {
     pub commitment_key: BytesN<32>,
     /// The recipient who receives funds via settle and close.
     pub to: Address,
-    /// The optional operator authorized to call settle and close on behalf
-    /// of the recipient. When not set, the `to` address is used.
-    pub operator: Option<Address>,
+    /// The address authorized to call settle and close. Can be the same
+    /// as `to` if no separate operator is needed.
+    pub operator: Address,
     /// The SEP-41 token used for payments.
     pub token: Address,
     /// The initial deposit amount.

@@ -15,9 +15,8 @@
 //!   commitments authorizing the recipient to settle or close the channel
 //!   and receive a given amount.
 //! - **Recipient (`to`)**: Receives funds via settle or close.
-//! - **Operator (`operator`, optional)**: Authorized to call `settle` and
-//!   `close` on behalf of the recipient. When not set, the `to` address
-//!   is used for authorization.
+//! - **Operator (`operator`)**: Authorized to call `settle` and `close`.
+//!   Can be the same as `to` if no separate operator is needed.
 //!
 //! ## Expectations
 //!
@@ -58,7 +57,7 @@
 //!
 //! | Function | Description |
 //! |---|---|
-//! | `__constructor` | Open a channel with an initial deposit and optional operator. Callable by the funder, or anyone if amount is zero. |
+//! | `__constructor` | Open a channel with an initial deposit. Callable by the funder, or anyone if amount is zero. |
 //! | `top_up` | Deposit additional tokens into the channel. |
 //! | `settle` | Withdraw funds using a signed commitment without closing the channel. |
 //! | `close` | Close the channel using a signed commitment, withdrawing funds to the recipient. Automatically attempts to refund the funder. |
@@ -78,7 +77,7 @@
 //! | `token` | Returns the token address. |
 //! | `from` | Returns the funder address. |
 //! | `to` | Returns the recipient address. |
-//! | `operator` | Returns the operator address, if set. |
+//! | `operator` | Returns the operator address. |
 //! | `refund_waiting_period` | Returns the refund waiting period in ledgers. |
 //!
 //! ### Getters (dynamic)
@@ -134,8 +133,7 @@
 //!
 //! ### 3. Settle
 //!
-//! The operator (or recipient, if no operator is set) calls
-//! [`Contract::settle`] at any time with a commitment
+//! The operator calls [`Contract::settle`] at any time with a commitment
 //! amount and its signature. The contract verifies the signature, then
 //! transfers the difference between the commitment amount and what has
 //! already been withdrawn. If the commitment amount is less than or equal
@@ -148,8 +146,7 @@
 //!
 //! ### 4. Close
 //!
-//! The operator (or recipient, if no operator is set) calls
-//! [`Contract::close`] with a commitment amount and its
+//! The operator calls [`Contract::close`] with a commitment amount and its
 //! signature. Like `settle`, only the difference between the commitment
 //! amount and what has already been withdrawn is transferred.
 //!
@@ -270,9 +267,8 @@ impl Contract {
     ///   signatures. See `prepare_commitment` for details on
     ///   commitments.
     /// - `to`: The recipient who receives funds via settle and close.
-    /// - `operator`: An optional address authorized to call `settle` and
-    ///   `close` on behalf of the recipient. When not provided, the `to`
-    ///   address is used for authorization.
+    /// - `operator`: The address authorized to call `settle` and `close`.
+    ///   Can be the same as `to` if no separate operator is needed.
     /// - `amount`: The initial deposit amount.
     /// - `refund_waiting_period`: The number of ledgers the recipient has to
     ///   close after `close_start` is called, before `refund`
@@ -288,7 +284,7 @@ impl Contract {
     ///
     /// # Auth
     /// - `from`: required if amount > 0.
-    pub fn __constructor(env: &Env, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, operator: Option<Address>, amount: i128, refund_waiting_period: u32) {
+    pub fn __constructor(env: &Env, token: Address, from: Address, commitment_key: BytesN<32>, to: Address, operator: Address, amount: i128, refund_waiting_period: u32) {
         assert_with_error!(env, amount >= 0, Error::NegativeAmount);
 
         // Store channel configuration.
@@ -296,9 +292,7 @@ impl Contract {
         env.storage().instance().set(&DataKey::From, &from);
         env.storage().instance().set(&DataKey::CommitmentKey, &commitment_key);
         env.storage().instance().set(&DataKey::To, &to);
-        if let Some(ref operator) = operator {
-            env.storage().instance().set(&DataKey::Operator, operator);
-        }
+        env.storage().instance().set(&DataKey::Operator, &operator);
         env.storage().instance().set(&DataKey::RefundWaitingPeriod, &refund_waiting_period);
 
         // Deposit initial funds.
@@ -365,16 +359,15 @@ impl Contract {
         env.storage().instance().get(&DataKey::To).unwrap()
     }
 
-    /// Returns the operator address, if set. The operator is authorized to
-    /// call `settle` and `close` on behalf of the recipient. When not set,
-    /// the `to` address is used for authorization.
+    /// Returns the operator address. The operator is authorized to call
+    /// `settle` and `close`.
     ///
     /// Callable by anyone.
     ///
     /// # Auth
     /// None.
-    pub fn operator(env: &Env) -> Option<Address> {
-        env.storage().instance().get(&DataKey::Operator)
+    pub fn operator(env: &Env) -> Address {
+        env.storage().instance().get(&DataKey::Operator).unwrap()
     }
 
     /// Returns the refund waiting period in ledgers.
@@ -456,10 +449,10 @@ impl Contract {
     /// Can be called even after the channel is closed, up until the funder
     /// calls [`Contract::refund`] and the balance is drained.
     ///
-    /// Callable by the operator, or the recipient (to) if no operator is set.
+    /// Callable by the operator.
     ///
     /// # Auth
-    /// - `operator` or `to`: required.
+    /// - `operator`: required.
     /// - Commitment signature serves as commitment_key authorization.
     pub fn settle(env: &Env, amount: i128, sig: BytesN<64>) {
         assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
@@ -492,10 +485,10 @@ impl Contract {
     /// Can be called even after the channel is closed, up until the funder
     /// calls [`Contract::refund`] and the balance is drained.
     ///
-    /// Callable by the operator, or the recipient (to) if no operator is set.
+    /// Callable by the operator.
     ///
     /// # Auth
-    /// - `operator` or `to`: required.
+    /// - `operator`: required.
     /// - Commitment signature serves as commitment_key authorization.
     pub fn close(env: &Env, amount: i128, sig: BytesN<64>) {
         assert_with_error!(&env, amount >= 0, Error::NegativeAmount);
@@ -612,8 +605,7 @@ impl Contract {
     }
 
     fn require_operator_auth(env: &Env) {
-        let auth_addr = Self::operator(env).unwrap_or_else(|| Self::to(env));
-        auth_addr.require_auth();
+        Self::operator(env).require_auth();
     }
 }
 

@@ -43,7 +43,7 @@ fn test_open() {
 
     // Deploy a channel via the factory.
     let salt = BytesN::from_array(&env, &[0u8; 32]);
-    let channel_id = factory_client.open(&salt, &token_addr, &funder, &auth_pubkey, &to, &None::<Address>, &500i128, &100u32);
+    let channel_id = factory_client.open(&salt, &token_addr, &funder, &auth_pubkey, &to, &to, &500i128, &100u32);
 
     // Verify the channel was funded.
     assert_eq!(token.balance(&channel_id), 500);
@@ -74,12 +74,12 @@ fn test_open_with_operator() {
 
     // Deploy a channel via the factory with an operator.
     let salt = BytesN::from_array(&env, &[1u8; 32]);
-    let channel_id = factory_client.open(&salt, &token_addr, &funder, &auth_pubkey, &to, &Some(operator.clone()), &500i128, &100u32);
+    let channel_id = factory_client.open(&salt, &token_addr, &funder, &auth_pubkey, &to, &operator, &500i128, &100u32);
 
     let channel_client = channel_contract::Client::new(&env, &channel_id);
 
     // Verify the channel was funded and operator is set.
     assert_eq!(token.balance(&channel_id), 500);
     assert_eq!(token.balance(&funder), 500);
-    assert_eq!(channel_client.operator(), Some(operator));
+    assert_eq!(channel_client.operator(), operator);
 }
