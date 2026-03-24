@@ -134,7 +134,8 @@
 //!
 //! ### 3. Settle
 //!
-//! The recipient calls [`Contract::settle`] at any time with a commitment
+//! The operator (or recipient, if no operator is set) calls
+//! [`Contract::settle`] at any time with a commitment
 //! amount and its signature. The contract verifies the signature, then
 //! transfers the difference between the commitment amount and what has
 //! already been withdrawn. If the commitment amount is less than or equal
@@ -147,7 +148,8 @@
 //!
 //! ### 4. Close
 //!
-//! The recipient calls [`Contract::close`] with a commitment amount and its
+//! The operator (or recipient, if no operator is set) calls
+//! [`Contract::close`] with a commitment amount and its
 //! signature. Like `settle`, only the difference between the commitment
 //! amount and what has already been withdrawn is transferred.
 //!
