@@ -749,6 +749,227 @@ fn test_close_twice() {
     assert_eq!(token.balance(&channel_id), 0);
 }
 
+/// Reopen after close transitions the channel back to Open and allows new
+/// commitments.
+#[test]
+fn test_reopen_after_close() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[27u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &2000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    // Close the channel.
+    let sig = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
+    client.close(&300, &sig);
+    assert_eq!(token.balance(&to), 300);
+    assert_eq!(token.balance(&funder), 1700);
+
+    // Reopen with a new deposit.
+    client.reopen(&400);
+    assert_eq!(token.balance(&channel_id), 400);
+    assert_eq!(token.balance(&funder), 1300);
+
+    // Can settle again with a new commitment (amount must be > withdrawn).
+    let sig2 = Commitment::new(channel_id.clone(), 600).sign(&auth_key);
+    client.settle(&600, &sig2);
+    assert_eq!(token.balance(&to), 600);
+    assert_eq!(client.withdrawn(), 600);
+}
+
+/// Reopen after close_start + wait + refund works.
+#[test]
+fn test_reopen_after_refund() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[28u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+    let refund_waiting_period: u32 = 100;
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &2000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
+    let client = ContractClient::new(&env, &channel_id);
+
+    client.close_start();
+
+    env.ledger().with_mut(|li| {
+        li.sequence_number += refund_waiting_period + 1;
+    });
+
+    client.refund();
+    assert_eq!(token.balance(&funder), 2000);
+    assert_eq!(token.balance(&channel_id), 0);
+
+    // Reopen with deposit.
+    client.reopen(&300);
+    assert_eq!(token.balance(&channel_id), 300);
+    assert_eq!(token.balance(&funder), 1700);
+
+    // Channel is open — close_start works again.
+    client.close_start();
+}
+
+/// Reopen preserves withdrawn amount so old commitments cannot be replayed.
+#[test]
+fn test_reopen_preserves_withdrawn() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[29u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &2000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    // Settle 300.
+    let sig1 = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
+    client.settle(&300, &sig1);
+    assert_eq!(client.withdrawn(), 300);
+
+    // Close with same 300 commitment (no additional payout).
+    let sig2 = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
+    client.close(&300, &sig2);
+
+    // Reopen.
+    client.reopen(&500);
+    assert_eq!(client.withdrawn(), 300);
+
+    // Replaying the old 300 commitment transfers nothing.
+    let sig3 = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
+    client.settle(&300, &sig3);
+    assert_eq!(token.balance(&to), 300);
+}
+
+/// Reopen with zero amount deposits nothing.
+#[test]
+fn test_reopen_zero_amount() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[30u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    let sig = Commitment::new(channel_id.clone(), 0).sign(&auth_key);
+    client.close(&0, &sig);
+
+    client.reopen(&0);
+    assert_eq!(token.balance(&channel_id), 0);
+    assert_eq!(token.balance(&funder), 1000);
+}
+
+/// Reopen fails if the channel is not closed.
+#[test]
+fn test_reopen_fails_when_open() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[31u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, _token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    let result = client.try_reopen(&0);
+    assert!(result.is_err());
+}
+
+/// Reopen fails during the close_start waiting period.
+#[test]
+fn test_reopen_fails_during_closing() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[32u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, _token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    client.close_start();
+
+    let result = client.try_reopen(&0);
+    assert!(result.is_err());
+}
+
+/// After reopen, close_start fails with AlreadyClosed are gone.
+#[test]
+fn test_close_start_works_after_reopen() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[33u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &2000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    // Close the channel.
+    let sig = Commitment::new(channel_id.clone(), 200).sign(&auth_key);
+    client.close(&200, &sig);
+
+    // Reopen.
+    client.reopen(&500);
+
+    // close_start should work again.
+    client.close_start();
+
+    // After waiting, refund works.
+    env.ledger().with_mut(|li| {
+        li.sequence_number += 101;
+    });
+
+    client.refund();
+    assert_eq!(token.balance(&funder), 1800);
+}
+
 /// Close panics if the commitment amount exceeds the channel balance.
 #[test]
 #[should_panic(expected = "balance is not sufficient")]

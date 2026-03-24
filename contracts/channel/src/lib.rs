@@ -46,6 +46,7 @@
 //!     Closing --> Closed: close
 //!     Closing --> Closed: [after wait]
 //!     Closed --> [*]: refund
+//!     Closed --> Open: reopen
 //! ```
 //!
 //! `top_up`, `settle`, and `close` can be called in any state.
@@ -62,6 +63,7 @@
 //! | `close` | Close the channel using a signed commitment, withdrawing funds to the recipient. Automatically attempts to refund the funder. |
 //! | `close_start` | Begin closing the channel, effective after a waiting period. |
 //! | `refund` | Refund the remaining balance to the funder after the close is effective. |
+//! | `reopen` | Reopen a closed channel with an optional deposit. |
 //!
 //! ### Helpers
 //!
@@ -180,6 +182,14 @@
 //! The contract does not reserve funds for the recipient. If the recipient
 //! has not closed before the funder calls refund, those funds are lost to
 //! the recipient and assumed to be of no interest to the recipient.
+//!
+//! ### 7. Reopen
+//!
+//! After the close is effective, the funder can call [`Contract::reopen`] to
+//! transition the channel back to the Open state. The `WithdrawnAmount` is
+//! preserved so that old commitment signatures cannot be replayed for funds
+//! that were already withdrawn. The funder can optionally deposit tokens in
+//! the same transaction.
 //!
 //! ## Security
 //!
@@ -542,6 +552,51 @@ impl Contract {
         env.storage().instance().set(&DataKey::CloseEffectiveAtLedger, &effective_at_ledger);
 
         env.events().publish_event(&event::Close { effective_at_ledger });
+        Ok(())
+    }
+
+    /// Reopen a closed channel, transitioning it back to the Open state.
+    ///
+    /// The funder can optionally deposit tokens in the same transaction by
+    /// passing a non-zero `amount`.
+    ///
+    /// The `WithdrawnAmount` is preserved so that old commitment signatures
+    /// cannot be replayed for funds that were already withdrawn.
+    ///
+    /// Callable by the funder (from), after the close is effective.
+    ///
+    /// # Auth
+    /// - `from`: required.
+    pub fn reopen(env: &Env, amount: i128) -> Result<(), Error> {
+        assert_with_error!(env, amount >= 0, Error::NegativeAmount);
+
+        // Verify the close is effective.
+        let effective_at_ledger = Self::close_effective_at_ledger(env).ok_or(Error::NotClosed)?;
+        if env.ledger().sequence() < effective_at_ledger {
+            return Err(Error::RefundWaitingPeriodNotElapsed);
+        }
+
+        // Verify the funder.
+        let from = Self::from(env);
+        from.require_auth();
+
+        // Clear the close state.
+        env.storage().instance().remove(&DataKey::CloseEffectiveAtLedger);
+
+        // Deposit funds if requested.
+        if amount > 0 {
+            Self::token_client(env).transfer(&from, &env.current_contract_address(), &amount);
+        }
+
+        env.events().publish_event(&event::Open {
+            from: from.clone(),
+            commitment_key: env.storage().instance().get(&DataKey::CommitmentKey).unwrap(),
+            to: Self::to(env),
+            token: Self::token(env),
+            amount,
+            refund_waiting_period: Self::refund_waiting_period(env),
+        });
+
         Ok(())
     }
 
