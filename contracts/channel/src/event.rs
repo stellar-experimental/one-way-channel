@@ -8,8 +8,11 @@ pub struct Open {
     pub from: Address,
     /// The ed25519 public key used to verify commitment signatures.
     pub commitment_key: BytesN<32>,
-    /// The recipient who can settle or close the channel using a commitment.
+    /// The recipient who receives funds via settle and close.
     pub to: Address,
+    /// The optional operator authorized to call settle and close on behalf
+    /// of the recipient. When not set, the `to` address is used.
+    pub operator: Option<Address>,
     /// The SEP-41 token used for payments.
     pub token: Address,
     /// The initial deposit amount.

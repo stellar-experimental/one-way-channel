@@ -52,7 +52,7 @@ fn test_settle() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
@@ -79,7 +79,7 @@ fn test_settle_incremental() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     // Settle 200 first.
@@ -112,7 +112,7 @@ fn test_settle_older_commitment_no_op() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     // Settle 300.
@@ -143,7 +143,7 @@ fn test_close_after_settle() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     // Settle 200 first.
@@ -176,7 +176,7 @@ fn test_close() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
@@ -204,7 +204,10 @@ fn test_close_start_and_refund() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
+    let channel_id = env.register(
+        Contract,
+        (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, refund_waiting_period),
+    );
     let client = ContractClient::new(&env, &channel_id);
 
     client.close_start();
@@ -233,7 +236,7 @@ fn test_refund_too_early() {
     let (token_addr, _token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     client.close_start();
@@ -257,7 +260,7 @@ fn test_refund_before_close_start_fails() {
     let (token_addr, _token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     let result = client.try_refund();
@@ -281,7 +284,10 @@ fn test_close_during_close_start() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
+    let channel_id = env.register(
+        Contract,
+        (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, refund_waiting_period),
+    );
     let client = ContractClient::new(&env, &channel_id);
 
     // Funder starts close.
@@ -313,7 +319,10 @@ fn test_settle_during_close_start() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
+    let channel_id = env.register(
+        Contract,
+        (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, refund_waiting_period),
+    );
     let client = ContractClient::new(&env, &channel_id);
 
     client.close_start();
@@ -351,7 +360,10 @@ fn test_settle_after_close_start_effective() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
+    let channel_id = env.register(
+        Contract,
+        (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, refund_waiting_period),
+    );
     let client = ContractClient::new(&env, &channel_id);
 
     client.close_start();
@@ -384,7 +396,7 @@ fn test_invalid_signature() {
     let (token_addr, _token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = Commitment::new(channel_id.clone(), 200).sign(&wrong_key);
@@ -409,7 +421,10 @@ fn test_close_after_close_start_effective() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
+    let channel_id = env.register(
+        Contract,
+        (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, refund_waiting_period),
+    );
     let client = ContractClient::new(&env, &channel_id);
 
     client.close_start();
@@ -441,7 +456,7 @@ fn test_top_up_after_creation() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 300i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 300i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     assert_eq!(token.balance(&channel_id), 300);
@@ -467,7 +482,7 @@ fn test_close_zero_amount() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = Commitment::new(channel_id.clone(), 0).sign(&auth_key);
@@ -494,7 +509,7 @@ fn test_close_full_balance_no_refund_event() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = Commitment::new(channel_id.clone(), 500).sign(&auth_key);
@@ -521,7 +536,10 @@ fn test_close_start_resets_waiting_period() {
     let (token_addr, _token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
+    let channel_id = env.register(
+        Contract,
+        (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, refund_waiting_period),
+    );
     let client = ContractClient::new(&env, &channel_id);
 
     client.close_start();
@@ -562,7 +580,10 @@ fn test_refund_twice() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
+    let channel_id = env.register(
+        Contract,
+        (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, refund_waiting_period),
+    );
     let client = ContractClient::new(&env, &channel_id);
 
     client.close_start();
@@ -594,7 +615,7 @@ fn test_top_up_zero() {
     let (token_addr, _token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     client.top_up(&0);
@@ -619,7 +640,10 @@ fn test_refund_at_exact_effective_ledger() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
+    let channel_id = env.register(
+        Contract,
+        (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, refund_waiting_period),
+    );
     let client = ContractClient::new(&env, &channel_id);
 
     client.close_start();
@@ -649,7 +673,10 @@ fn test_close_start_fails_after_effective() {
     let (token_addr, _token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, refund_waiting_period));
+    let channel_id = env.register(
+        Contract,
+        (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, refund_waiting_period),
+    );
     let client = ContractClient::new(&env, &channel_id);
 
     client.close_start();
@@ -677,7 +704,7 @@ fn test_close_start_fails_after_close() {
     let (token_addr, _token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
@@ -702,7 +729,7 @@ fn test_refund_after_close() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
@@ -729,7 +756,7 @@ fn test_close_twice() {
     let (token_addr, token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &2000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     // First close: transfers 300, auto-refunds 200.
@@ -765,9 +792,89 @@ fn test_close_amount_exceeds_balance() {
     let (token_addr, _token, asset_admin) = create_token(&env);
     asset_admin.mint(&funder, &1000);
 
-    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
     let sig = Commitment::new(channel_id.clone(), 600).sign(&auth_key);
     client.close(&600, &sig);
+}
+
+/// When an operator is set, the operator can settle and funds go to the recipient.
+#[test]
+fn test_settle_with_operator() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[27u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), Some(operator.clone()), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    assert_eq!(client.operator(), Some(operator.clone()));
+
+    let sig = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
+    client.settle(&300, &sig);
+
+    // Funds go to the recipient, not the operator.
+    assert_eq!(token.balance(&to), 300);
+    assert_eq!(token.balance(&operator), 0);
+    assert_eq!(token.balance(&channel_id), 200);
+}
+
+/// When an operator is set, the operator can close and funds go to the recipient.
+#[test]
+fn test_close_with_operator() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[28u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), Some(operator.clone()), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    let sig = Commitment::new(channel_id.clone(), 300).sign(&auth_key);
+    client.close(&300, &sig);
+
+    // Funds go to the recipient, not the operator.
+    assert_eq!(token.balance(&to), 300);
+    assert_eq!(token.balance(&operator), 0);
+    assert_eq!(token.balance(&funder), 700);
+    assert_eq!(token.balance(&channel_id), 0);
+}
+
+/// When no operator is set, the operator getter returns None.
+#[test]
+fn test_no_operator() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[29u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, _token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), None::<Address>, 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    assert_eq!(client.operator(), None);
 }
