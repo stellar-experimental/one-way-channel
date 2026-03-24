@@ -11,12 +11,15 @@
 //!
 //! ## Participants
 //!
-//! - **Funder (`from`)**: Deposits tokens into the channel and signs
-//!   commitments authorizing the recipient to settle or close the channel
-//!   and receive a given amount.
-//! - **Recipient (`to`)**: Receives funds via settle or close.
-//! - **Operator (`operator`)**: Authorized to call `settle` and `close`.
-//!   Can be the same as `to` if no separate operator is needed.
+//! - **Funder (`from`)**: Deposits tokens into the channel. Calls
+//!   `close_start` and `refund` to reclaim remaining funds.
+//! - **Committer (`commitment_key`)**: An ed25519 key that signs commitments
+//!   off-chain authorizing the operator to settle or close the channel for
+//!   a given amount. Typically controlled by the funder.
+//! - **Recipient (`to`)**: Receives funds via `settle` or `close`.
+//! - **Operator (`operator`)**: Authorized to call `settle` and `close`
+//!   on-chain using signed commitments. Can be the same as `to` if no
+//!   separate operator is needed.
 //!
 //! ## Expectations
 //!
@@ -25,17 +28,22 @@
 //!
 //! ### Funder
 //!
-//! - Keeping the private key corresponding to `commitment_key` (the commitment signing key) secret.
+//! - Keeping the private key corresponding to `commitment_key` secret.
 //!
-//! ### Recipient
+//! ### Committer
+//!
+//! - Signs commitments with increasing amounts as payments are made.
+//! - Only signs commitments for amounts the funder intends to pay.
+//!
+//! ### Recipient / Operator
 //!
 //! - Verifies the `refund_waiting_period` at channel creation is long
 //!   enough to allow them to react to a close_start event.
 //! - Verifies the `amount` in each commitment is less than the channels
 //!   balance.
 //! - Monitors the channel for [`event::Close`] events.
-//! - Calls `settle` with a commitment promptly after seeing a close_start
-//!   event, before the funder calls `refund`.
+//! - Calls `settle` or `close` with a commitment promptly after seeing a
+//!   close_start event, before the funder calls `refund`.
 //!
 //! ## State diagram
 //!
@@ -92,9 +100,10 @@
 //!
 //! ### 1. Open
 //!
-//! The channel is deployed with a SEP-41 token, funder address, recipient
-//! address, an ed25519 `commitment_key` (public key), an initial deposit
-//! amount, and a `refund_waiting_period` (in ledgers).
+//! The channel is deployed with a SEP-41 token, funder (`from`) address,
+//! recipient (`to`) address, an ed25519 `commitment_key` (public key), an
+//! operator address, an initial deposit amount, and a
+//! `refund_waiting_period` (in ledgers).
 //!
 //! The funder's tokens are transferred into the channel contract on deployment.
 //! The funder can also top up the channel later using [`Contract::top_up`], or
@@ -102,22 +111,24 @@
 //!
 //! ### 2. Off-chain payments
 //!
-//! The funder makes payments by signing commitments off-chain and sending them
-//! to the recipient. A commitment authorizes the recipient to settle or
-//! close the channel and receive a **cumulative total** amount. Each new
-//! commitment replaces the previous one.
+//! The funder makes payments by having the committer sign commitments
+//! off-chain and sending them to the operator (or recipient). A commitment
+//! authorizes the operator to settle or close the channel and transfer a
+//! **cumulative total** amount to the recipient. Each new commitment
+//! replaces the previous one.
 //!
 //! For example:
-//! - Commitment for 100: recipient can settle or close and receive 100.
-//! - Commitment for 140: recipient can settle or close and receive 140
-//!   (40 more if 100 was already settled).
+//! - Commitment for 100: operator can settle or close and 100 is sent to
+//!   the recipient.
+//! - Commitment for 140: operator can settle or close and 140 total is
+//!   sent to the recipient (40 more if 100 was already settled).
 //!
 //! A commitment is an XDR serialized [`Commitment`] struct containing a domain
 //! separator (`chancmmt`), the network ID, the channel contract address, and
-//! the amount. The
-//! funder signs the serialized bytes with the ed25519 key corresponding to the
-//! `commitment_key`. Use [`Contract::prepare_commitment`] as a convenience to
-//! generate the bytes to sign.
+//! the amount. The committer signs the serialized bytes with the ed25519 key
+//! corresponding to the `commitment_key`. Use
+//! [`Contract::prepare_commitment`] as a convenience to generate the bytes
+//! to sign.
 //!
 //! The serialized commitment is an XDR `ScVal::Map` with four entries
 //! (sorted alphabetically by key):
@@ -139,10 +150,10 @@
 //! already been withdrawn. If the commitment amount is less than or equal
 //! to what has already been withdrawn, no transfer occurs.
 //!
-//! Settlement is optional. The recipient does not need to settle at all —
-//! [`Contract::close`] will also settle any unsettled amount. The recipient
-//! may choose to settle periodically to receive funds without closing the
-//! channel.
+//! Settlement is optional. The operator does not need to settle at all —
+//! [`Contract::close`] will also settle any unsettled amount. The operator
+//! may choose to settle periodically to transfer funds to the recipient
+//! without closing the channel.
 //!
 //! ### 4. Close
 //!
@@ -165,11 +176,11 @@
 //! The close does not take effect immediately — there is a waiting period of
 //! `refund_waiting_period` ledgers.
 //!
-//! The recipient can still call [`Contract::settle`] or [`Contract::close`]
+//! The operator can still call [`Contract::settle`] or [`Contract::close`]
 //! during and after the waiting period. Once the waiting period has elapsed,
 //! the funder can call `refund` to reclaim the remaining balance.
 //!
-//! **Important:** The recipient should monitor for [`event::Close`] events and
+//! **Important:** The operator should monitor for [`event::Close`] events and
 //! settle or close before the funder calls `refund`.
 //!
 //! ### 6. Refund
@@ -177,22 +188,22 @@
 //! After the refund waiting period has elapsed, the funder calls
 //! [`Contract::refund`] to reclaim whatever balance remains in the channel.
 //! This transfers the **entire** remaining token balance to the funder,
-//! including any amount the recipient was entitled to but did not settle or
-//! close for.
-//! The contract does not reserve funds for the recipient. If the recipient
-//! has not closed before the funder calls refund, those funds are lost to
-//! the recipient and assumed to be of no interest to the recipient.
+//! including any amount the recipient was entitled to but was not settled or
+//! closed for.
+//! The contract does not reserve funds for the recipient. If the operator
+//! has not settled or closed before the funder calls refund, those funds
+//! are lost to the recipient.
 //!
 //! ## Security
 //!
-//! - Commitments are signed with an ed25519 key, not a Stellar account. The
-//!   `commitment_key` is set at deployment and cannot be changed.
+//! - Commitments are signed with an ed25519 key (the `commitment_key`), not
+//!   a Stellar account. The key is set at deployment and cannot be changed.
 //! - The commitment includes a domain separator, the network ID, and the
 //!   channel contract address, preventing signatures from being reused across
 //!   networks, channels, or confused with other signed payloads.
-//! - The refund waiting period protects the recipient: it gives them time to
-//!   settle or close using their latest commitment before the funder can
-//!   reclaim funds.
+//! - The refund waiting period protects the recipient: it gives the operator
+//!   time to settle or close using the latest commitment before the funder
+//!   can reclaim funds.
 
 #![no_std]
 #[allow(unused_imports)]
