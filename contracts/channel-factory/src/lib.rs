@@ -17,7 +17,7 @@
 //! | `wasm_hash` | Returns the stored channel wasm hash. |
 
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, xdr::ToXdr, Address, BytesN, Env};
 
 #[contracttype]
 pub enum DataKey {
@@ -27,6 +27,9 @@ pub enum DataKey {
 
 #[contract]
 pub struct FactoryContract;
+
+#[contracttype]
+struct DeploymentSaltPreimage(Address, BytesN<32>);
 
 #[contractimpl]
 impl FactoryContract {
@@ -90,9 +93,10 @@ impl FactoryContract {
 
         // Deploy the channel contract using the stored wasm hash.
         let wasm_hash = Self::wasm_hash(env);
+        let deployment_salt: BytesN<32> = env.crypto().sha256(&DeploymentSaltPreimage(from.clone(), salt).to_xdr(env)).into();
         let channel_address = env
             .deployer()
-            .with_current_contract(salt)
+            .with_current_contract(deployment_salt)
             .deploy_v2(wasm_hash, (token, from, commitment_key, to, amount, refund_waiting_period));
 
         channel_address
