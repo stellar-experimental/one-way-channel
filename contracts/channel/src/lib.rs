@@ -193,8 +193,6 @@
 //!   reclaim funds.
 
 #![no_std]
-#[cfg(test)]
-extern crate std;
 
 #[allow(unused_imports)]
 use soroban_sdk::{assert_with_error, contract, contracterror, contractimpl, contracttype, symbol_short, token, xdr::ToXdr, Address, Bytes, BytesN, Env, Symbol};
