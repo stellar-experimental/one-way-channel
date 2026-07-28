@@ -600,7 +600,7 @@ fn test_top_up_zero() {
     client.top_up(&0);
     assert_eq!(
         env.auths(),
-        std::vec![(
+        [(
             funder.clone(),
             AuthorizedInvocation {
                 function: AuthorizedFunction::Contract((channel_id.clone(), Symbol::new(&env, "top_up"), (0i128,).into_val(&env))),
@@ -632,7 +632,7 @@ fn test_open_zero_amount() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 0i128, 100u32));
     assert_eq!(
         env.auths(),
-        std::vec![(
+        [(
             funder.clone(),
             AuthorizedInvocation {
                 function: AuthorizedFunction::Contract((

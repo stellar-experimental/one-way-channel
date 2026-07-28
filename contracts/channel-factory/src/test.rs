@@ -88,7 +88,7 @@ fn test_open_zero_amount() {
 
     assert_eq!(
         env.auths(),
-        std::vec![(
+        [(
             funder.clone(),
             AuthorizedInvocation {
                 function: AuthorizedFunction::Contract((
