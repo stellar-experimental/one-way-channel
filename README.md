@@ -56,7 +56,7 @@ stateDiagram-v2
 
 | Function | Description |
 |---|---|
-| `__constructor` | Open a channel with an initial deposit. Callable by the funder, or anyone if amount is zero. |
+| `__constructor` | Open a channel with an initial deposit. Callable by the deployer, authorized by the funder. |
 | `top_up` | Deposit additional tokens into the channel. |
 | `settle` | Withdraw funds using a signed commitment without closing the channel. |
 | `close` | Close the channel using a signed commitment, withdrawing funds to the recipient. Automatically attempts to refund the funder. |
