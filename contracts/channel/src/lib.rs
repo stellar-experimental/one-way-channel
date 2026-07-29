@@ -193,7 +193,6 @@
 //!   reclaim funds.
 
 #![no_std]
-
 #[allow(unused_imports)]
 use soroban_sdk::{assert_with_error, contract, contracterror, contractimpl, contracttype, symbol_short, token, xdr::ToXdr, Address, Bytes, BytesN, Env, Symbol};
 
@@ -316,7 +315,6 @@ impl Contract {
     /// - `from`: required.
     pub fn top_up(env: &Env, amount: i128) {
         assert_with_error!(env, amount >= 0, Error::NegativeAmount);
-
         // Transfer tokens from the funder to the channel.
         let from = Self::from(env);
         from.require_auth();

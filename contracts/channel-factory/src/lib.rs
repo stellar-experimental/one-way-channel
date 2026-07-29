@@ -17,7 +17,6 @@
 //! | `wasm_hash` | Returns the stored channel wasm hash. |
 
 #![no_std]
-
 use soroban_sdk::{contract, contractimpl, contracttype, xdr::ToXdr, Address, BytesN, Env};
 
 #[contracttype]
