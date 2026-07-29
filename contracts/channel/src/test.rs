@@ -2,9 +2,9 @@
 
 use ed25519_dalek::SigningKey;
 use soroban_sdk::{
-    testutils::{Address as _, Events as _, Ledger},
+    testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Events as _, Ledger},
     token::{StellarAssetClient, TokenClient},
-    xdr, Address, BytesN, Env,
+    xdr, Address, BytesN, Env, IntoVal, Symbol,
 };
 
 use crate::{Commitment, Contract, ContractClient};
@@ -579,7 +579,7 @@ fn test_refund_twice() {
     assert_eq!(token.balance(&funder), 1000);
 }
 
-/// Top up with amount 0 is a no-op and does not require auth.
+/// Top up with amount 0 still requires the funder's auth.
 #[test]
 fn test_top_up_zero() {
     let env = Env::default();
@@ -598,9 +598,51 @@ fn test_top_up_zero() {
     let client = ContractClient::new(&env, &channel_id);
 
     client.top_up(&0);
-    let auths = env.auths();
-    assert!(auths.is_empty());
+    assert_eq!(
+        env.auths(),
+        [(
+            funder.clone(),
+            AuthorizedInvocation {
+                function: AuthorizedFunction::Contract((channel_id.clone(), Symbol::new(&env, "top_up"), (0i128,).into_val(&env))),
+                sub_invocations: [].into(),
+            }
+        )]
+    );
     assert_eq!(client.balance(), 500);
+}
+
+/// Opening a channel with amount 0 still requires the funder's auth.
+#[test]
+fn test_open_zero_amount() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[27u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 0i128, 100u32));
+    assert_eq!(
+        env.auths(),
+        [(
+            funder.clone(),
+            AuthorizedInvocation {
+                function: AuthorizedFunction::Contract((
+                    channel_id.clone(),
+                    Symbol::new(&env, "__constructor"),
+                    (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 0i128, 100u32).into_val(&env),
+                )),
+                sub_invocations: [].into(),
+            }
+        )]
+    );
+    assert_eq!(token.balance(&channel_id), 0);
+    assert_eq!(token.balance(&funder), 1000);
 }
 
 /// Refund succeeds at exactly the effective_at_ledger.
