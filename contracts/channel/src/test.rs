@@ -604,11 +604,7 @@ fn test_top_up_zero() {
             funder.clone(),
             AuthorizedInvocation {
                 function: AuthorizedFunction::Contract((channel_id.clone(), Symbol::new(&env, "top_up"), (0i128,).into_val(&env))),
-                sub_invocations: [AuthorizedInvocation {
-                    function: AuthorizedFunction::Contract((token_addr.clone(), Symbol::new(&env, "transfer"), (funder.clone(), channel_id.clone(), 0i128).into_val(&env))),
-                    sub_invocations: [].into(),
-                }]
-                .into(),
+                sub_invocations: [].into(),
             }
         )]
     );
@@ -641,11 +637,7 @@ fn test_open_zero_amount() {
                     Symbol::new(&env, "__constructor"),
                     (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 0i128, 100u32).into_val(&env),
                 )),
-                sub_invocations: [AuthorizedInvocation {
-                    function: AuthorizedFunction::Contract((token_addr.clone(), Symbol::new(&env, "transfer"), (funder.clone(), channel_id.clone(), 0i128).into_val(&env))),
-                    sub_invocations: [].into(),
-                }]
-                .into(),
+                sub_invocations: [].into(),
             }
         )]
     );

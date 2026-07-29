@@ -315,10 +315,12 @@ impl Contract {
     /// - `from`: required.
     pub fn top_up(env: &Env, amount: i128) {
         assert_with_error!(env, amount >= 0, Error::NegativeAmount);
-        // Transfer tokens from the funder to the channel.
         let from = Self::from(env);
         from.require_auth();
-        Self::token_client(env).transfer(&from, &env.current_contract_address(), &amount);
+        if amount > 0 {
+            // Transfer tokens from the funder to the channel.
+            Self::token_client(env).transfer(&from, &env.current_contract_address(), &amount);
+        }
     }
 
     /// Returns the token address.
