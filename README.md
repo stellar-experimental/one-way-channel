@@ -58,6 +58,7 @@ stateDiagram-v2
 |---|---|
 | `__constructor` | Open a channel with an initial deposit. Callable by the deployer, authorized by the funder. |
 | `top_up` | Deposit additional tokens into the channel. |
+| `extend` | Extend the lifetime (TTL) of the channel's storage. |
 | `settle` | Withdraw funds using a signed commitment without closing the channel. |
 | `close` | Close the channel using a signed commitment, withdrawing funds to the recipient. Automatically attempts to refund the funder. |
 | `close_start` | Begin closing the channel, effective after a waiting period. |
@@ -137,6 +138,11 @@ transfers the difference between the commitment amount and what has
 already been withdrawn. If the commitment amount is less than or equal
 to what has already been withdrawn, no transfer occurs.
 
+If the channel balance is lower than the amount owed, the available
+balance is transferred and the remainder stays claimable: the recipient
+can settle again with the same commitment after the funder tops up the
+channel.
+
 Settlement is optional. The recipient does not need to settle at all —
 [`Contract::close`] will also settle any unsettled amount. The recipient
 may choose to settle periodically to receive funds without closing the
@@ -180,6 +186,14 @@ close for.
 The contract does not reserve funds for the recipient. If the recipient
 has not closed before the funder calls refund, those funds are lost to
 the recipient and assumed to be of no interest to the recipient.
+
+## Storage lifetime
+
+All channel state is stored in instance storage. State-changing functions
+(`top_up`, `settle`, `close`, `close_start`) extend the storage TTL as a
+side effect, and anyone can call [`Contract::extend`] to extend it
+explicitly. A channel left idle for a long period can still have its
+storage archived; it must then be restored before use.
 
 ## Security
 

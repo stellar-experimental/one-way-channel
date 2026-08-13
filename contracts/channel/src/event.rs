@@ -18,6 +18,21 @@ pub struct Open {
     pub refund_waiting_period: u32,
 }
 
+/// Emitted when the funder deposits tokens into the channel via top_up,
+/// including the initial deposit made by the constructor.
+///
+/// Tokens transferred directly to the channel contract address outside of
+/// top_up do not emit this event and are only observable via the token
+/// contract's own events.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Deposit {
+    /// The funder who deposited the tokens.
+    pub from: Address,
+    /// The amount deposited.
+    pub amount: i128,
+}
+
 /// Emitted when channel close starts, either immediately via close or with
 /// a waiting period via close_start.
 ///
