@@ -58,6 +58,7 @@
 //! |---|---|
 //! | `__constructor` | Open a channel with an initial deposit. Callable by the deployer, authorized by the funder. |
 //! | `top_up` | Deposit additional tokens into the channel. |
+//! | `extend` | Extend the lifetime (TTL) of the channel's storage. |
 //! | `settle` | Withdraw funds using a signed commitment without closing the channel. |
 //! | `close` | Close the channel using a signed commitment, withdrawing funds to the recipient. Automatically attempts to refund the funder. |
 //! | `close_start` | Begin closing the channel, effective after a waiting period. |
@@ -137,6 +138,11 @@
 //! already been withdrawn. If the commitment amount is less than or equal
 //! to what has already been withdrawn, no transfer occurs.
 //!
+//! If the channel balance is lower than the amount owed, the available
+//! balance is transferred and the remainder stays claimable: the recipient
+//! can settle again with the same commitment after the funder tops up the
+//! channel.
+//!
 //! Settlement is optional. The recipient does not need to settle at all —
 //! [`Contract::close`] will also settle any unsettled amount. The recipient
 //! may choose to settle periodically to receive funds without closing the
@@ -181,6 +187,14 @@
 //! has not closed before the funder calls refund, those funds are lost to
 //! the recipient and assumed to be of no interest to the recipient.
 //!
+//! ## Storage lifetime
+//!
+//! All channel state is stored in instance storage. State-changing functions
+//! (`top_up`, `settle`, `close`, `close_start`) extend the storage TTL as a
+//! side effect, and anyone can call [`Contract::extend`] to extend it
+//! explicitly. A channel left idle for a long period can still have its
+//! storage archived; it must then be restored before use.
+//!
 //! ## Security
 //!
 //! - Commitments are signed with an ed25519 key, not a Stellar account. The
@@ -197,6 +211,13 @@
 use soroban_sdk::{assert_with_error, contract, contracterror, contractimpl, contracttype, symbol_short, token, xdr::ToXdr, Address, Bytes, BytesN, Env, Symbol};
 
 pub mod event;
+
+/// Approximate number of ledgers per day, assuming 5 second ledger close times.
+const LEDGERS_PER_DAY: u32 = 17280;
+/// When the instance storage TTL drops below this threshold, extend it.
+const TTL_THRESHOLD: u32 = 30 * LEDGERS_PER_DAY;
+/// The TTL to extend the instance storage to.
+const TTL_EXTEND_TO: u32 = 60 * LEDGERS_PER_DAY;
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -317,10 +338,25 @@ impl Contract {
         assert_with_error!(env, amount >= 0, Error::NegativeAmount);
         let from = Self::from(env);
         from.require_auth();
+        Self::extend_instance_ttl(env);
         if amount > 0 {
             // Transfer tokens from the funder to the channel.
             Self::token_client(env).transfer(&from, &env.current_contract_address(), &amount);
+            env.events().publish_event(&event::Deposit { from, amount });
         }
+    }
+
+    /// Extend the lifetime (TTL) of the channel's instance storage, so that
+    /// a long-lived channel is not archived while in use. Extension also
+    /// happens as a side effect of `top_up`, `settle`, `close`, and
+    /// `close_start`.
+    ///
+    /// Callable by anyone.
+    ///
+    /// # Auth
+    /// None.
+    pub fn extend(env: &Env) {
+        Self::extend_instance_ttl(env);
     }
 
     /// Returns the token address.
@@ -429,6 +465,10 @@ impl Contract {
     /// If an older commitment with a lower amount is used after a higher amount
     /// has already been withdrawn, no funds are transferred.
     ///
+    /// If the channel balance is lower than the amount owed, the available
+    /// balance is transferred and the remainder stays claimable with the same
+    /// commitment after a future top up.
+    ///
     /// Can be called even after the channel is closed, up until the funder
     /// calls [`Contract::refund`] and the balance is drained.
     ///
@@ -444,20 +484,18 @@ impl Contract {
         let to = Self::to(env);
         to.require_auth();
         Commitment::new(env.current_contract_address(), amount).verify(&sig);
+        Self::extend_instance_ttl(env);
 
         // Transfer only the difference from what has already been withdrawn.
-        let payout = amount - Self::withdrawn(env);
-        if payout > 0 {
-            env.storage().instance().set(&DataKey::WithdrawnAmount, &amount);
-            Self::token_client(env).transfer(&env.current_contract_address(), &to, &payout);
-            env.events().publish_event(&event::Withdraw { to, amount: payout });
-        }
+        Self::withdraw(env, to, amount);
     }
 
     /// Close the channel using a signed commitment, withdrawing funds to the
     /// recipient. The amount is the cumulative total the recipient is entitled
     /// to. Only the difference between the amount and what has already been
-    /// withdrawn is transferred.
+    /// withdrawn is transferred. If the channel balance is lower than the
+    /// amount owed, the available balance is transferred and the remainder
+    /// stays claimable with the same commitment after a future top up.
     ///
     /// After transferring, this function automatically attempts to refund the
     /// remaining balance to the funder using `try_transfer`. This refund
@@ -480,14 +518,10 @@ impl Contract {
         let to = Self::to(env);
         to.require_auth();
         Commitment::new(env.current_contract_address(), amount).verify(&sig);
+        Self::extend_instance_ttl(env);
 
         // Transfer only the difference from what has already been withdrawn.
-        let payout = amount - Self::withdrawn(env);
-        if payout > 0 {
-            env.storage().instance().set(&DataKey::WithdrawnAmount, &amount);
-            Self::token_client(env).transfer(&env.current_contract_address(), &to, &payout);
-            env.events().publish_event(&event::Withdraw { to, amount: payout });
-        }
+        Self::withdraw(env, to, amount);
 
         // Mark the channel as closed immediately if not already closed, or
         // resolve a pending close_start by setting the effective ledger to now.
@@ -535,6 +569,7 @@ impl Contract {
         // Verify the funder.
         let from = Self::from(env);
         from.require_auth();
+        Self::extend_instance_ttl(env);
 
         // Set the close effective ledger.
         let refund_waiting_period = Self::refund_waiting_period(env);
@@ -581,6 +616,29 @@ impl Contract {
 impl Contract {
     fn token_client(env: &Env) -> token::Client<'_> {
         token::Client::new(env, &Self::token(env))
+    }
+
+    fn extend_instance_ttl(env: &Env) {
+        env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+
+    /// Transfer to the recipient the difference between the cumulative
+    /// committed amount and what has already been withdrawn, capped at the
+    /// channel's current balance. Advances WithdrawnAmount only by the amount
+    /// actually transferred, so any shortfall stays claimable later.
+    fn withdraw(env: &Env, to: Address, amount: i128) {
+        let withdrawn = Self::withdrawn(env);
+        let owed = amount - withdrawn;
+        if owed > 0 {
+            let tc = Self::token_client(env);
+            let balance = tc.balance(&env.current_contract_address());
+            let payout = owed.min(balance);
+            if payout > 0 {
+                env.storage().instance().set(&DataKey::WithdrawnAmount, &(withdrawn + payout));
+                tc.transfer(&env.current_contract_address(), &to, &payout);
+                env.events().publish_event(&event::Withdraw { to, amount: payout });
+            }
+        }
     }
 
     fn close_effective_at_ledger(env: &Env) -> Option<u32> {

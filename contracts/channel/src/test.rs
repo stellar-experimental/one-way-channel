@@ -791,14 +791,74 @@ fn test_close_twice() {
     assert_eq!(token.balance(&channel_id), 0);
 }
 
-/// Close panics if the commitment amount exceeds the channel balance.
+/// Close with a commitment amount exceeding the channel balance transfers
+/// the available balance and records only what was actually withdrawn.
 #[test]
-#[should_panic(expected = "balance is not sufficient")]
 fn test_close_amount_exceeds_balance() {
     let env = Env::default();
     env.mock_all_auths();
 
     let auth_key = SigningKey::from_bytes(&[26u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    let sig = Commitment::new(channel_id.clone(), 600).sign(&auth_key);
+    client.close(&600, &sig);
+    assert_eq!(token.balance(&to), 500);
+    assert_eq!(token.balance(&channel_id), 0);
+    assert_eq!(client.withdrawn(), 500);
+}
+
+/// Settle with a commitment amount exceeding the channel balance transfers
+/// the available balance; the remainder stays claimable with the same
+/// commitment after a top up.
+#[test]
+fn test_settle_partial_then_top_up() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[28u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    // Commitment for more than the channel balance: only the balance is paid.
+    let sig = Commitment::new(channel_id.clone(), 600).sign(&auth_key);
+    client.settle(&600, &sig);
+    assert_eq!(token.balance(&to), 500);
+    assert_eq!(token.balance(&channel_id), 0);
+    assert_eq!(client.withdrawn(), 500);
+
+    // After a top up, the same commitment settles the remainder.
+    client.top_up(&300);
+    client.settle(&600, &sig);
+    assert_eq!(token.balance(&to), 600);
+    assert_eq!(token.balance(&channel_id), 200);
+    assert_eq!(client.withdrawn(), 600);
+}
+
+/// Top up emits a Deposit event, and the constructor's initial deposit does too.
+#[test]
+fn test_top_up_emits_deposit_event() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[29u8; 32]);
     let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
 
     let to = Address::generate(&env);
@@ -810,6 +870,6 @@ fn test_close_amount_exceeds_balance() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
-    let sig = Commitment::new(channel_id.clone(), 600).sign(&auth_key);
-    client.close(&600, &sig);
+    client.top_up(&200);
+    assert!(has_event_type(&env, &channel_id, "deposit"));
 }
