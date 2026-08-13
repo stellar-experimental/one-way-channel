@@ -494,8 +494,11 @@ impl Contract {
     /// recipient. The amount is the cumulative total the recipient is entitled
     /// to. Only the difference between the amount and what has already been
     /// withdrawn is transferred. If the channel balance is lower than the
-    /// amount owed, the available balance is transferred and the remainder
-    /// stays claimable with the same commitment after a future top up.
+    /// amount owed, the available balance is transferred rather than failing.
+    /// Note that because close makes the channel refundable immediately, any
+    /// shortfall is only recoverable if the funder tops up and the recipient
+    /// settles before the funder refunds — prefer `settle` when a shortfall
+    /// is expected to be recovered.
     ///
     /// After transferring, this function automatically attempts to refund the
     /// remaining balance to the funder using `try_transfer`. This refund
