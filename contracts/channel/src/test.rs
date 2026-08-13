@@ -2,19 +2,27 @@
 
 use ed25519_dalek::SigningKey;
 use soroban_sdk::{
-    testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Events as _, Ledger},
+    testutils::{storage::Instance as _, Address as _, AuthorizedFunction, AuthorizedInvocation, Events as _, Ledger},
     token::{StellarAssetClient, TokenClient},
     xdr, Address, BytesN, Env, IntoVal, Symbol,
 };
 
 use crate::{Commitment, Contract, ContractClient};
 
-fn has_event_type(env: &Env, contract: &Address, event_name: &str) -> bool {
+fn count_event_type(env: &Env, contract: &Address, event_name: &str) -> usize {
     let events = env.events().all().filter_by_contract(contract);
     let target = xdr::ScVal::Symbol(xdr::ScSymbol(event_name.try_into().unwrap()));
-    events.events().iter().any(|e| match &e.body {
-        xdr::ContractEventBody::V0(body) => body.topics.first() == Some(&target),
-    })
+    events
+        .events()
+        .iter()
+        .filter(|e| match &e.body {
+            xdr::ContractEventBody::V0(body) => body.topics.first() == Some(&target),
+        })
+        .count()
+}
+
+fn has_event_type(env: &Env, contract: &Address, event_name: &str) -> bool {
+    count_event_type(env, contract, event_name) > 0
 }
 
 impl Commitment {
@@ -870,6 +878,43 @@ fn test_top_up_emits_deposit_event() {
     let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
     let client = ContractClient::new(&env, &channel_id);
 
+    // env.events().all() only holds events from the most recent invocation,
+    // so each assertion isolates a single emitter.
+    // The constructor's initial deposit emits a Deposit event.
+    assert_eq!(count_event_type(&env, &channel_id, "deposit"), 1);
+
+    // Top up emits its own Deposit event.
     client.top_up(&200);
-    assert!(has_event_type(&env, &channel_id, "deposit"));
+    assert_eq!(count_event_type(&env, &channel_id, "deposit"), 1);
+}
+
+/// Extend requires no auth and extends the instance storage TTL.
+#[test]
+fn test_extend() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let auth_key = SigningKey::from_bytes(&[30u8; 32]);
+    let auth_pubkey = BytesN::from_array(&env, &auth_key.verifying_key().to_bytes());
+
+    let to = Address::generate(&env);
+    let funder = Address::generate(&env);
+
+    let (token_addr, _token, asset_admin) = create_token(&env);
+    asset_admin.mint(&funder, &1000);
+
+    let channel_id = env.register(Contract, (token_addr.clone(), funder.clone(), auth_pubkey.clone(), to.clone(), 500i128, 100u32));
+    let client = ContractClient::new(&env, &channel_id);
+
+    // Let the instance TTL decay below the extension threshold.
+    env.ledger().with_mut(|l| l.sequence_number += 31 * 17280);
+    let ttl_before = env.as_contract(&channel_id, || env.storage().instance().get_ttl());
+
+    client.extend();
+
+    // No auth is required.
+    assert_eq!(env.auths(), []);
+    // The instance TTL has been extended.
+    let ttl_after = env.as_contract(&channel_id, || env.storage().instance().get_ttl());
+    assert!(ttl_after > ttl_before);
 }
