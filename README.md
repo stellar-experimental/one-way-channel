@@ -209,3 +209,231 @@ versions of the channel contract.
 | `open` | Deploy a new channel contract with the given parameters. |
 | `admin` | Returns the admin address. |
 | `wasm_hash` | Returns the stored channel wasm hash. |
+
+# Clearing
+
+An optimistic payment clearing contract for Soroban (Stellar),
+implementing the settlement-chain side of the Bajillion protocol
+described in [Keep the Change](https://commonware.xyz/blogs/clearing).
+
+Bajillion is an optimistic clearing protocol for many-to-many payments at
+massive scale. Payments flow off-chain through a non-custodial operator
+selected by the sender. At each settlement the epoch's activity becomes a
+few-kilobyte commitment: one row per changed account, regardless of how
+many payments changed it. For a given set of accounts, one payment or a
+bajillion costs the same to settle.
+
+> [!WARNING]
+> **The contracts in this repository have not been audited.**
+
+## Participants
+
+- **Accounts**: Identified by a registry index and an ed25519 key bound in
+  the account's state leaf. Accounts sign debits (payments), exits
+  (withdrawals), and unwind claims with this key.
+- **Operator**: Serves payments off-chain, countersigning each accepted
+  payment with a receipt, and builds epoch closes. The operator is
+  non-custodial: funds never leave the contract except to released
+  withdrawals and unwind claims.
+- **Validators**: A fixed committee that exhaustively verifies each
+  close's public corpus off-chain and signs its header. The contract
+  accepts a close only with a quorum certificate.
+- **Challengers**: Anyone holding a signed payment pair (typically payers,
+  recipients, or watchtowers acting for them) can submit a one-shot
+  challenge that proves a close contradicts a retained receipt.
+
+## The clearing model
+
+Each account's persistent state is a leaf
+`(active, balance, credit, debit, key, receipts)` in a fixed-capacity
+Merkle registry. The registry's root is the **state root**. An epoch `e`
+starts from `StateRoot_e`, fixes its boundary (deposits and user-signed
+withdrawals), accepts payments off-chain, and closes by committing:
+
+- One **row** per changed account, strictly sorted by account index,
+  carrying the account's opening and closing leaves, its terminal
+  outgoing pair when it sent, the Merkle root of its receive-shard tips
+  (the **credit root**), and a running prefix total over the sorted rows.
+- A **change root**: a Merkle root binding the exact row count and every
+  row in order.
+- A **header** `(StateRoot_e, ChangeRoot_e, StateRoot_e+1, D_e, C_e, F_e,
+  W_e, ...)` signed by a quorum of validators.
+
+The contract verifies the certificate, opens the terminal row against the
+change root to check the header's totals, checks the chain-sealed boundary
+(`F_e` and `W_e` must consume exactly the deposit and exit records the
+contract recorded), and enforces the conservation laws:
+
+```text
+D_e = C_e                        (gross debits equal gross credits)
+L_e+1 = L_e + F_e - W_e          (liability changes only by boundary flows)
+```
+
+Everything else — per-row balance equations, prefix continuity, the
+paired sparse witness that recomputes both state roots, credit-root
+reconstruction — is verified off-chain by the validator committee before
+it signs. The complete public corpus must remain retrievable through the
+challenge deadline.
+
+## Off-chain payments
+
+To send `x > 0`, the payer signs the exact next cumulative debit and the
+operator accepts by advancing one of the recipient's receive shards and
+countersigning a receipt:
+
+```text
+S = Sign_a(epoch, a -> b: x, D_a + x)
+R = Sign_op(epoch, b, shard, x, TxId(S), (G + x, J + 1))
+```
+
+The matching pair `(S, R)` is the accepted payment and the
+preconfirmation, and doubles as the evidence that holds the close honest.
+`TxId(S)` is the SHA-256 of the XDR serialized send body. Receive shards
+let a hot recipient's incoming path scale in parallel: payments assigned
+to different shards never contend, and one terminal tip per shard
+represents any number of payments.
+
+All signed payloads are XDR serialized structs carrying a domain
+separator, the network id, and this contract's address, preventing reuse
+across networks, deployments, or payload kinds. See
+[`Contract::prepare_send`], [`Contract::prepare_receipt`],
+[`Contract::prepare_exit`], and [`Contract::prepare_claim`].
+
+## The unavoidable challenge
+
+A validity proof over the public corpus cannot prove the nonexistence of
+an additional privately delivered receipt, so every close waits out a
+challenge window before finalizing. Through the inclusive deadline any
+holder may submit one of four bounded, non-interactive contradictions:
+
+| # | Challenge | Function | Contradiction |
+|---|---|---|---|
+| 1 | Payer debit | `challenge_debit` | A matching pair carries a debit above the account's public debit marker. |
+| 1 | Payer debit | `challenge_debit_body` | A matching pair carries the same debit as the row's terminal pair but a different send or receipt body. |
+| 2 | Higher shard tip | `challenge_tip` | A retained receipt strictly exceeds the shard tip bound in the row's credit root. |
+| 2 | Higher shard tip | `challenge_tip_absent` | A retained receipt names a shard the credit root proves absent (tip `(0, 0)`). |
+| 2 | Higher shard tip | `challenge_tip_no_row` | A retained receipt credits an account the close proves rowless (tip `(0, 0)`). |
+| 3 | Receipt range | `challenge_range` | Two receipts in one shard whose credits cannot bracket the payments between them. |
+| 4 | Receipt fork | `challenge_fork` | Two distinct receipt bodies reuse a receipt index or acknowledge one send differently. |
+
+A successful challenge blocks the contested close and every pending
+descendant from finalizing (the queue is truncated). Earlier pending
+closes keep their ordinary challenge windows. The operator may submit a
+corrected close for the invalidated epoch.
+
+## Exits and the deadline
+
+Every account holds a unilateral exit: a signed withdrawal
+`Q = Sign_a(root, destination, amount, full_close, deadline)` queued
+directly on-chain with a Merkle proof of affordability against the
+finalized root. The operator neither submits nor approves it. A close
+consumes queued exits in order as part of its chain-sealed boundary, and
+once that close finalizes anyone can `release` the payment to the signed
+destination.
+
+If an exit is still unreleased when its deadline passes, the first call
+to `freeze` permanently stops new deposits, exits, and closes. Pending
+closes still resolve from the front — each finalizes when its window
+closes, or falls to a challenge — and terminal unwind opens against the
+last finalized root:
+
+- `unwind_exit` pays queued, unconsumed exits to their signed
+  destinations, capped by the account's proven balance.
+- `unwind_claim` pays an account's remaining balance to a destination
+  signed by the account key, against one Merkle proof.
+- `unwind_deposit` refunds deposits no finalized close consumed to their
+  depositors.
+
+Custody never leaves the chain: withdrawals stay inside until their own
+close finalizes at the queue front, so the operator can stop serving
+payments, but it cannot take funds or send them without authorization.
+
+## Functions
+
+### Lifecycle
+
+| Function | Description |
+|---|---|
+| `__constructor` | Deploy with a token, operator key, validator committee, quorum, registry depth, challenge window, and minimum exit delay. |
+| `deposit` | Deposit tokens for an account key. Recorded as a boundary record for the next close. |
+| `exit` | Queue a signed withdrawal with a proof of affordability against the finalized root. |
+| `submit` | Submit a certified close for the next epoch into the pending queue. |
+| `finalize` | Finalize the front of the pending queue after its challenge window. |
+| `release` | Pay a withdrawal consumed by a finalized close to its signed destination. |
+| `freeze` | Permanently freeze new work after an exit deadline is breached. |
+
+### Challenges
+
+| Function | Description |
+|---|---|
+| `challenge_debit` | Prove a retained pair's debit exceeds the public debit marker. |
+| `challenge_debit_body` | Prove a retained pair differs from the terminal pair at the same debit. |
+| `challenge_tip` | Prove a retained receipt exceeds a shard tip bound in the close. |
+| `challenge_tip_absent` | Prove a retained receipt names a shard the close binds as absent. |
+| `challenge_tip_no_row` | Prove a retained receipt credits an account with no row in the close. |
+| `challenge_range` | Prove two receipts in one shard are mutually inconsistent. |
+| `challenge_fork` | Prove the operator signed two forking receipts. |
+
+### Terminal unwind
+
+| Function | Description |
+|---|---|
+| `unwind_exit` | Pay a queued, unconsumed exit against the last finalized root. |
+| `unwind_claim` | Claim an account's remaining balance with a Merkle proof and a signed destination. |
+| `unwind_deposit` | Refund a deposit no finalized close consumed. |
+
+### Helpers
+
+| Function | Description |
+|---|---|
+| `prepare_send` | Generate the send payload bytes a payer signs. |
+| `prepare_receipt` | Generate the receipt payload bytes the operator signs. |
+| `prepare_exit` | Generate the exit payload bytes an account signs. |
+| `prepare_claim` | Generate the unwind claim payload bytes an account signs. |
+
+### Getters
+
+| Function | Description |
+|---|---|
+| `token` | The custody token address. |
+| `operator_key` | The operator's receipt signing key. |
+| `validators` | The validator committee keys. |
+| `quorum` | The certificate quorum size. |
+| `registry_depth` | The account registry tree depth. |
+| `challenge_window` | The challenge window in ledgers. |
+| `min_exit_delay` | The minimum ledgers between queueing an exit and its deadline. |
+| `frozen` | Whether new work is frozen. |
+| `next_epoch` | The next epoch a close can be submitted for. |
+| `finalized_epoch` | The number of finalized closes. |
+| `finalized_root` | The last finalized state root (the genesis root before any close). |
+| `finalized_liability` | The total balance the registry owes accounts at the finalized root. |
+| `custody` | The token balance held by the contract. |
+| `slot` | A pending or finalized close by epoch. |
+| `deposit_count` / `deposit_record` | Deposit boundary records. |
+| `exit_count` / `exit_record` | Exit boundary records. |
+| `pending_exits` | The total queued, unpaid exit amount for a key. |
+| `unwound` | The total already paid to a key during terminal unwind. |
+
+## Trust model and deviations
+
+The contract trusts a quorum of the validator committee for the
+correctness of everything it does not check itself (per-row balance
+equations, registration validity, exit re-affordability at pending
+roots). Retained receipts keep even a colluding operator and committee
+from finalizing a close that drops or understates accepted payments, and
+`freeze` plus terminal unwind guarantee recovery through the settlement
+chain alone. Known simplifications relative to the blog post:
+
+- The validator committee is fixed at deployment; rotation is out of
+  scope.
+- A withdrawal releases exactly its signed amount. The `full_close` flag
+  is carried in the signed payload and honored during terminal unwind
+  (the exit drains the account's proven balance), but committee policy
+  governs account deactivation inside closes.
+- Receipts naming a key that never appears in the registry are not
+  challengeable on-chain: the debit and tip challenges authenticate the
+  recipient's key through its registry leaf. Registration completeness is
+  part of what the committee attests.
+- Data availability of the public corpus (rows, shard vectors, witness)
+  through the challenge deadline is assumed, as in the blog post, via
+  committee assignment and quorum intersection.
